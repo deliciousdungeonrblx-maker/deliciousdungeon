@@ -1,10 +1,14 @@
 package com.meshi.entity;
 
+import com.meshi.crop.GolemCrop;
+import com.meshi.registry.ModEntities;
+import com.meshi.util.Fx;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.damagesource.DamageSource;
@@ -19,10 +23,14 @@ import net.minecraft.world.entity.ai.goal.RandomLookAroundGoal;
 import net.minecraft.world.entity.ai.goal.WaterAvoidingRandomStrollGoal;
 import net.minecraft.world.entity.ai.goal.target.HurtByTargetGoal;
 import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.Vec3;
 import software.bernie.geckolib.animatable.GeoEntity;
 import software.bernie.geckolib.animatable.instance.AnimatableInstanceCache;
 import software.bernie.geckolib.animation.AnimatableManager;
@@ -37,8 +45,11 @@ import software.bernie.geckolib.util.GeckoLibUtil;
  *
  * HasCrops  - which texture to wear (false = plain golem, true = crops on its back).
  * RiseTicks - while above 0 the golem plays its "rise" animation and stays put. The soil mound
- *             will set this when it turns into a golem. Test it with:
- *             /summon meshi:earth_golem ~ ~ ~ {RiseTicks:40}
+ *             sets this when it turns into a golem.
+ * Seeds/Crop - what was planted in the mound it came from. Drops 2 crops per seed when it dies,
+ *             then leaves a fresh empty mound where it fell.
+ *
+ * Test the rise animation with:  /summon meshi:earth_golem ~ ~ ~ {RiseTicks:40}
  */
 public class EarthGolemEntity extends Monster implements GeoEntity {
     private static final EntityDataAccessor<Boolean> HAS_CROPS =
@@ -55,6 +66,11 @@ public class EarthGolemEntity extends Monster implements GeoEntity {
     private static final RawAnimation ATTACK = RawAnimation.begin().thenPlay("attack");
 
     private final AnimatableInstanceCache cache = GeckoLibUtil.createInstanceCache(this);
+
+    /** Seeds planted in the mound this golem grew from, and which crop. Server side only. */
+    private int seeds = 0;
+    private String cropId = "";
+    private boolean deathHandled = false;
 
     public EarthGolemEntity(EntityType<? extends EarthGolemEntity> type, Level level) {
         super(type, level);
@@ -117,11 +133,20 @@ public class EarthGolemEntity extends Monster implements GeoEntity {
         setRiseTicks(RISE_DURATION);
     }
 
+    /** What was planted in the mound this golem grew from. Any seeds put the crops on its back. */
+    public void setSoil(int seeds, GolemCrop crop) {
+        this.seeds = Math.max(0, seeds);
+        this.cropId = (crop == null || this.seeds <= 0) ? "" : crop.id();
+        setHasCrops(this.seeds > 0);
+    }
+
     @Override
     public void addAdditionalSaveData(CompoundTag tag) {
         super.addAdditionalSaveData(tag);
         tag.putBoolean("HasCrops", hasCrops());
         tag.putInt("RiseTicks", getRiseTicks());
+        tag.putInt("Seeds", this.seeds);
+        tag.putString("Crop", this.cropId);
     }
 
     @Override
@@ -129,6 +154,8 @@ public class EarthGolemEntity extends Monster implements GeoEntity {
         super.readAdditionalSaveData(tag);
         setHasCrops(tag.getBoolean("HasCrops"));
         setRiseTicks(tag.getInt("RiseTicks"));
+        this.seeds = tag.getInt("Seeds");
+        this.cropId = tag.getString("Crop");
     }
 
     @Override
@@ -136,7 +163,30 @@ public class EarthGolemEntity extends Monster implements GeoEntity {
         super.tick();
         if (!this.level().isClientSide && isRising()) {
             this.getNavigation().stop();
+            if (this.level() instanceof ServerLevel server) {
+                // Dirt keeps crumbling off it while it climbs out of the ground.
+                if (this.tickCount % 2 == 0) {
+                    Fx.dirtBurst(server, getX(), getY() + 0.1D, getZ(), 8, 0.7D, 0.04D);
+                }
+                if (this.tickCount % 8 == 0) {
+                    this.playSound(SoundEvents.GRAVEL_STEP, 1.0F, 0.5F);
+                }
+            }
             setRiseTicks(getRiseTicks() - 1);
+        }
+    }
+
+    /** Dirt kicked up under its feet while it walks (client side, only the people looking see it). */
+    @Override
+    public void aiStep() {
+        super.aiStep();
+        if (this.level().isClientSide && this.onGround() && !isRising()
+                && this.getDeltaMovement().horizontalDistanceSqr() > 2.5E-4D && this.tickCount % 4 == 0) {
+            for (int i = 0; i < 2; i++) {
+                double ox = (this.random.nextDouble() - 0.5D) * 1.0D;
+                double oz = (this.random.nextDouble() - 0.5D) * 1.0D;
+                this.level().addParticle(Fx.dirt(), getX() + ox, getY() + 0.05D, getZ() + oz, 0.0D, 0.05D, 0.0D);
+            }
         }
     }
 
@@ -156,6 +206,83 @@ public class EarthGolemEntity extends Monster implements GeoEntity {
             target.hurtMarked = true;
         }
         return hit;
+    }
+
+    /** Called when the punch starts: a heavy whoosh and a little dust at the fists. */
+    public void attackStartEffects() {
+        if (this.level() instanceof ServerLevel server) {
+            Fx.sound(server, getX(), getY() + 1.0D, getZ(), SoundEvents.IRON_GOLEM_ATTACK, 1.0F, 0.6F);
+        }
+    }
+
+    /** Called when the arms meet: dirt flies from the point of impact in front of the golem. */
+    public void impactEffects() {
+        if (this.level() instanceof ServerLevel server) {
+            Vec3 front = this.position()
+                    .add(Vec3.directionFromRotation(0.0F, this.yBodyRot).scale(1.5D))
+                    .add(0.0D, 0.15D, 0.0D);
+            Fx.dirtBurst(server, front.x, front.y, front.z, 16, 0.4D, 0.07D);
+            Fx.sound(server, front.x, front.y, front.z, SoundEvents.GRAVEL_BREAK, 1.2F, 0.6F);
+            Fx.sound(server, front.x, front.y, front.z, SoundEvents.ROOTED_DIRT_BREAK, 1.0F, 0.8F);
+        }
+    }
+
+    @Override
+    public boolean hurt(DamageSource source, float amount) {
+        boolean hurt = super.hurt(source, amount);
+        if (hurt && this.level() instanceof ServerLevel server) {
+            Fx.dirtBurst(server, getX(), getY() + 1.6D, getZ(), 10, 0.5D, 0.05D);
+        }
+        return hurt;
+    }
+
+    // ---------------------------------------------------------------- death
+
+    @Override
+    public void die(DamageSource source) {
+        super.die(source);
+        if (this.level() instanceof ServerLevel server) {
+            // It crumbles apart as it falls.
+            Fx.dirtBurst(server, getX(), getY() + 1.2D, getZ(), 70, 0.9D, 0.1D);
+            Fx.sound(server, getX(), getY(), getZ(), SoundEvents.GRAVEL_BREAK, 1.5F, 0.5F);
+        }
+    }
+
+    /**
+     * When the fall-over animation finishes and the golem is removed, drop its crops and leave a
+     * fresh mound (no seeds, one-day timer already running) where it fell.
+     */
+    @Override
+    protected void tickDeath() {
+        super.tickDeath();
+        if (this.isRemoved() && !this.deathHandled && this.level() instanceof ServerLevel server) {
+            this.deathHandled = true;
+            finishDeath(server);
+        }
+    }
+
+    private void finishDeath(ServerLevel server) {
+        GolemCrop crop = GolemCrop.byId(this.cropId);
+        if (crop != null && this.seeds > 0) {
+            Item item = crop.dropItem();
+            if (item != null) {
+                ItemStack stack = new ItemStack(item, this.seeds * GolemCrop.CROPS_PER_SEED);
+                server.addFreshEntity(new ItemEntity(server, getX(), getY() + 0.6D, getZ(), stack));
+            }
+        }
+
+        SoilMoundEntity mound = ModEntities.SOIL_MOUND.get().create(server);
+        if (mound != null) {
+            float yaw = getYRot();
+            mound.setPos(getX(), getY(), getZ());
+            mound.setYRot(yaw);
+            mound.yRotO = yaw;
+            mound.startTimer(server.getGameTime());
+            server.addFreshEntity(mound);
+        }
+
+        Fx.dirtBurst(server, getX(), getY() + 0.3D, getZ(), 50, 1.2D, 0.08D);
+        Fx.sound(server, getX(), getY(), getZ(), SoundEvents.GRAVEL_BREAK, 1.2F, 0.6F);
     }
 
     // ---------------------------------------------------------------- sounds

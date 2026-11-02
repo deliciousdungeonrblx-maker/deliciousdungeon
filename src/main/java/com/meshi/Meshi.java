@@ -29,5 +29,8 @@ public class Meshi {
         if (event.getTabKey() == CreativeModeTabs.SPAWN_EGGS) {
             event.accept(ModItems.EARTH_GOLEM_SPAWN_EGG);
         }
+        if (event.getTabKey() == CreativeModeTabs.INGREDIENTS) {
+            event.accept(ModItems.GOLEM_SOIL);
+        }
     }
 }

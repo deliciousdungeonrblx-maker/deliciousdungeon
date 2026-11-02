@@ -5,19 +5,25 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.goal.Goal;
 
 /**
- * Chase the target, wind up, then punch. The "attack" animation is 1 second long and its arms come
- * down at about 0.5 seconds, so the damage lands HIT_DELAY ticks after the animation starts.
+ * Chase the target and punch it. The damage and knockback land the instant the punch animation starts.
+ * The dirt puff and thud are timed to the moment the arms meet (0.5 s into the 1 s animation).
+ *
+ * Want the damage to land when the arms meet instead? Put the hit in the "impact" branch below
+ * (where impactEffects() is called) instead of next to triggerAnim().
  */
 public class GolemPunchGoal extends Goal {
-    /** Ticks from the start of the animation to the moment the hit lands (0.5 s). */
-    private static final int HIT_DELAY = 10;
+    /** The golem stands still while the 1 second punch animation plays. */
+    private static final int SWING_TICKS = 20;
     /** Ticks between the start of one punch and the start of the next (1.5 s). */
     private static final int ATTACK_COOLDOWN = 30;
+    /** Ticks after the animation starts until the arms meet and the dust flies (0.5 s). */
+    private static final int IMPACT_DELAY = 10;
 
     private final EarthGolemEntity golem;
     private final double speed;
 
-    private int windup = -1;   // -1 = not punching, otherwise ticks left until the hit lands
+    private int swing = 0;      // ticks left of standing still during the punch
+    private int impact = -1;    // ticks until the arms meet, -1 = nothing pending
     private int cooldown = 0;
     private int repath = 0;
 
@@ -53,7 +59,8 @@ public class GolemPunchGoal extends Goal {
     public void stop() {
         golem.setAggressive(false);
         golem.getNavigation().stop();
-        windup = -1;
+        swing = 0;
+        impact = -1;
     }
 
     @Override
@@ -69,18 +76,20 @@ public class GolemPunchGoal extends Goal {
             cooldown--;
         }
 
-        // Mid-punch: stand still until the hit lands.
-        if (windup >= 0) {
-            golem.getNavigation().stop();
-            if (windup > 0) {
-                windup--;
+        // Dust and thud when the arms meet.
+        if (impact >= 0) {
+            if (impact == 0) {
+                golem.impactEffects();
+                impact = -1;
             } else {
-                // Allow a little slack so a player who steps back a bit still gets hit.
-                if (golem.distanceToSqr(target) <= reachSqr(target) * 1.5D) {
-                    golem.doHurtTarget(target);
-                }
-                windup = -1;
+                impact--;
             }
+        }
+
+        // Mid-punch: stand still until the animation is over.
+        if (swing > 0) {
+            swing--;
+            golem.getNavigation().stop();
             return;
         }
 
@@ -90,14 +99,17 @@ public class GolemPunchGoal extends Goal {
             golem.getNavigation().moveTo(target, speed);
         }
 
-        // Start a punch.
+        // Punch: animation, damage and knockback all start now.
         if (cooldown <= 0
                 && golem.distanceToSqr(target) <= reachSqr(target)
                 && golem.getSensing().hasLineOfSight(target)) {
-            windup = HIT_DELAY;
+            swing = SWING_TICKS;
             cooldown = ATTACK_COOLDOWN;
+            impact = IMPACT_DELAY;
             golem.getNavigation().stop();
             golem.triggerAnim("attack", "attack");
+            golem.attackStartEffects();
+            golem.doHurtTarget(target);
         }
     }
 
