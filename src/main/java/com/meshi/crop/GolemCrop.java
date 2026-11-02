@@ -1,6 +1,12 @@
 package com.meshi.crop;
 
+import java.util.ArrayList;
+import java.util.List;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.StringTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -72,9 +78,36 @@ public enum GolemCrop {
         return null;
     }
 
-    /** Index used for syncing to clients; -1 means "no crop yet". */
-    public static GolemCrop byIndex(int index) {
-        GolemCrop[] all = values();
-        return index >= 0 && index < all.length ? all[index] : null;
+    /**
+     * Reads the list of planted crops (one entry per seed, any mix) from a tag.
+     * Old saves that stored "Seeds" + "Crop" (one crop type only) still load: they become that many of that crop.
+     */
+    public static List<GolemCrop> readList(CompoundTag tag, int max) {
+        List<GolemCrop> list = new ArrayList<>();
+        if (tag.contains("Crops", Tag.TAG_LIST)) {
+            ListTag ids = tag.getList("Crops", Tag.TAG_STRING);
+            for (int i = 0; i < ids.size() && list.size() < max; i++) {
+                GolemCrop crop = byId(ids.getString(i));
+                if (crop != null) {
+                    list.add(crop);
+                }
+            }
+        } else {
+            GolemCrop legacy = byId(tag.getString("Crop"));
+            int seeds = Math.min(max, tag.getInt("Seeds"));
+            for (int i = 0; legacy != null && i < seeds; i++) {
+                list.add(legacy);
+            }
+        }
+        return list;
+    }
+
+    /** Writes the planted crops as a list of crop ids, one per seed. */
+    public static void writeList(CompoundTag tag, List<GolemCrop> crops) {
+        ListTag ids = new ListTag();
+        for (GolemCrop crop : crops) {
+            ids.add(StringTag.valueOf(crop.id()));
+        }
+        tag.put("Crops", ids);
     }
 }
