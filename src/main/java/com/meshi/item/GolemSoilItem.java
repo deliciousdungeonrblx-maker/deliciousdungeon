@@ -5,7 +5,10 @@ import com.meshi.entity.SoilMoundEntity;
 import com.meshi.registry.ModEntities;
 import com.meshi.registry.ModItems;
 import com.meshi.util.Fx;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -33,13 +36,12 @@ public class GolemSoilItem extends Item {
         super(properties);
     }
 
-    public static ItemStack create(int seeds, GolemCrop crop) {
+    /** A Golem Soil item that remembers every seed planted, in any mix of crops. */
+    public static ItemStack create(List<GolemCrop> crops) {
         ItemStack stack = new ItemStack(ModItems.GOLEM_SOIL.get());
-        if (seeds > 0 && crop != null) {
-            CustomData.update(DataComponents.CUSTOM_DATA, stack, tag -> {
-                tag.putInt("Seeds", seeds);
-                tag.putString("Crop", crop.id());
-            });
+        if (!crops.isEmpty()) {
+            List<GolemCrop> copy = new ArrayList<>(crops);
+            CustomData.update(DataComponents.CUSTOM_DATA, stack, tag -> GolemCrop.writeList(tag, copy));
         }
         return stack;
     }
@@ -48,12 +50,9 @@ public class GolemSoilItem extends Item {
         return stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag();
     }
 
-    public static int seedsOf(ItemStack stack) {
-        return Math.max(0, Math.min(SoilMoundEntity.MAX_SEEDS, dataOf(stack).getInt("Seeds")));
-    }
-
-    public static GolemCrop cropOf(ItemStack stack) {
-        return GolemCrop.byId(dataOf(stack).getString("Crop"));
+    /** The planted crops stored on the item, one entry per seed (old one-crop items still read fine). */
+    public static List<GolemCrop> cropsOf(ItemStack stack) {
+        return GolemCrop.readList(dataOf(stack), SoilMoundEntity.MAX_SEEDS);
     }
 
     @Override
@@ -82,12 +81,19 @@ public class GolemSoilItem extends Item {
         float yaw = context.getRotation();
         mound.setYRot(yaw);
         mound.yRotO = yaw;
-        mound.setContents(seedsOf(stack), cropOf(stack));
+        List<GolemCrop> crops = cropsOf(stack);
+        mound.setCrops(crops);
         mound.startTimer(server.getGameTime());
         server.addFreshEntity(mound);
 
-        Fx.dirtBurst(server, at.x, at.y + 0.2D, at.z, 18, 0.7D, 0.05D);
+        Fx.dirtBurst(server, at.x, at.y + 0.2D, at.z, 24, 0.8D, 0.06D);
+        Fx.shockwave(server, Fx.dirt(), at.x, at.y + 0.1D, at.z, 1.5D);
+        Fx.dust(server, at.x, at.y + 0.3D, at.z, 6, 0.6D);
+        if (!crops.isEmpty()) {
+            Fx.sparkle(server, at.x, at.y + 0.5D, at.z, 6 + 2 * crops.size(), 0.8D);
+        }
         Fx.sound(server, at.x, at.y, at.z, SoundEvents.GRAVEL_PLACE, 1.0F, 0.7F);
+        Fx.sound(server, at.x, at.y, at.z, SoundEvents.ROOTED_DIRT_PLACE, 1.0F, 0.7F);
 
         Player player = context.getPlayer();
         if (player == null || !player.getAbilities().instabuild) {
@@ -98,11 +104,22 @@ public class GolemSoilItem extends Item {
 
     @Override
     public void appendHoverText(ItemStack stack, Item.TooltipContext context, List<Component> tooltip, TooltipFlag flag) {
-        int seeds = seedsOf(stack);
-        GolemCrop crop = cropOf(stack);
-        if (seeds > 0 && crop != null) {
-            tooltip.add(Component.literal("Crop: " + crop.displayName()).withStyle(ChatFormatting.GRAY));
-            tooltip.add(Component.literal("Seeds: " + seeds + "/" + SoilMoundEntity.MAX_SEEDS).withStyle(ChatFormatting.GRAY));
+        List<GolemCrop> crops = cropsOf(stack);
+        if (!crops.isEmpty()) {
+            // "Cabbage x2, Tomato x1" in the order they were first planted.
+            Map<GolemCrop, Integer> counts = new LinkedHashMap<>();
+            for (GolemCrop crop : crops) {
+                counts.merge(crop, 1, Integer::sum);
+            }
+            StringBuilder line = new StringBuilder();
+            for (Map.Entry<GolemCrop, Integer> entry : counts.entrySet()) {
+                if (line.length() > 0) {
+                    line.append(", ");
+                }
+                line.append(entry.getKey().displayName()).append(" x").append(entry.getValue());
+            }
+            tooltip.add(Component.literal("Crops: " + line).withStyle(ChatFormatting.GRAY));
+            tooltip.add(Component.literal("Seeds: " + crops.size() + "/" + SoilMoundEntity.MAX_SEEDS).withStyle(ChatFormatting.GRAY));
         } else {
             tooltip.add(Component.literal("No seeds planted").withStyle(ChatFormatting.DARK_GRAY));
         }
