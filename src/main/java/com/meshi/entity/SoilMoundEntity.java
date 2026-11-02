@@ -4,6 +4,8 @@ import com.meshi.crop.GolemCrop;
 import com.meshi.item.GolemSoilItem;
 import com.meshi.registry.ModEntities;
 import com.meshi.util.Fx;
+import java.util.ArrayList;
+import java.util.List;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.syncher.EntityDataAccessor;
@@ -28,12 +30,15 @@ import software.bernie.geckolib.util.GeckoLibUtil;
 /**
  * The soil mound. It is built like a decoration, not a mob:
  *  - nothing can hurt it or fight it (players cannot even target it), and it never moves;
- *  - right-click with a plantable item to add a seed (up to 4, one crop type per mound);
+ *  - right-click with a plantable item to add a seed (up to 4, any mix of crops);
  *  - right-click with an empty hand to pick it up as a Golem Soil item;
  *  - one Minecraft day (24000 ticks) after it was placed it rises as an earth golem.
  *
+ * While it grows it sparkles, and in the last 30 seconds the ground starts to tremble more and more.
+ *
  * Handy test command (a tiny timer so you do not wait a day):
- *   /summon meshi:soil_mound ~ ~ ~ {Seeds:2,Crop:"cabbage",GrowTicks:200}
+ *   /summon meshi:soil_mound ~ ~ ~ {Crops:["cabbage","tomato","carrot"],GrowTicks:200}
+ * (The old form {Seeds:2,Crop:"cabbage"} still works.)
  * Only /kill or falling out of the world removes it.
  */
 public class SoilMoundEntity extends Entity implements GeoEntity {
@@ -41,12 +46,14 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
     /** One full Minecraft day. */
     public static final long GROW_TICKS = 24000L;
 
+    /** Only the number of seeds is synced to clients (the texture depends on it). */
     private static final EntityDataAccessor<Integer> SEEDS =
-            SynchedEntityData.defineId(SoilMoundEntity.class, EntityDataSerializers.INT);
-    private static final EntityDataAccessor<Integer> CROP =
             SynchedEntityData.defineId(SoilMoundEntity.class, EntityDataSerializers.INT);
 
     private final AnimatableInstanceCache cache = GeckoLibUtil.createInstanceCache(this);
+
+    /** What was planted, one entry per seed, in the order they went in. The server keeps the real list. */
+    private final List<GolemCrop> planted = new ArrayList<>();
 
     /** Game time at which this mound rises. -1 = timer not started yet. */
     private long readyAt = -1L;
@@ -63,14 +70,19 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
         return this.entityData.get(SEEDS);
     }
 
-    public GolemCrop getCrop() {
-        return GolemCrop.byIndex(this.entityData.get(CROP));
+    /** A copy of the planted crops, one entry per seed. */
+    public List<GolemCrop> getCrops() {
+        return new ArrayList<>(this.planted);
     }
 
-    public void setContents(int seeds, GolemCrop crop) {
-        int clamped = Math.max(0, Math.min(MAX_SEEDS, seeds));
-        this.entityData.set(SEEDS, clamped);
-        this.entityData.set(CROP, clamped > 0 && crop != null ? crop.ordinal() : -1);
+    public void setCrops(List<GolemCrop> crops) {
+        this.planted.clear();
+        for (GolemCrop crop : crops) {
+            if (crop != null && this.planted.size() < MAX_SEEDS) {
+                this.planted.add(crop);
+            }
+        }
+        this.entityData.set(SEEDS, this.planted.size());
     }
 
     /** Starts (or restarts) the one-day countdown. */
@@ -81,13 +93,11 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(SEEDS, 0);
-        builder.define(CROP, -1);
     }
 
     @Override
     protected void readAdditionalSaveData(CompoundTag tag) {
-        GolemCrop crop = GolemCrop.byId(tag.getString("Crop"));
-        setContents(tag.getInt("Seeds"), crop);
+        setCrops(GolemCrop.readList(tag, MAX_SEEDS));
         if (tag.contains("ReadyAt")) {
             this.readyAt = tag.getLong("ReadyAt");
         }
@@ -98,9 +108,7 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
 
     @Override
     protected void addAdditionalSaveData(CompoundTag tag) {
-        tag.putInt("Seeds", getSeeds());
-        GolemCrop crop = getCrop();
-        tag.putString("Crop", crop == null ? "" : crop.id());
+        GolemCrop.writeList(tag, this.planted);
         if (this.readyAt >= 0) {
             tag.putLong("ReadyAt", this.readyAt);
         }
@@ -147,31 +155,59 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
         return InteractionResult.PASS;
     }
 
+    /** Any plantable item can go in, in any mix, until the mound is full. */
     private InteractionResult plant(Player player, ItemStack held, GolemCrop crop) {
-        GolemCrop current = getCrop();
-        if (getSeeds() >= MAX_SEEDS || (current != null && current != crop)) {
+        if (getSeeds() >= MAX_SEEDS) {
+            if (this.level() instanceof ServerLevel server) {
+                // A dull thud so it is clear the mound is full.
+                Fx.sound(server, getX(), getY(), getZ(), SoundEvents.GRAVEL_HIT, 1.0F, 0.6F);
+            }
             return InteractionResult.FAIL;
         }
         if (this.level() instanceof ServerLevel server) {
-            setContents(getSeeds() + 1, crop);
+            this.planted.add(crop);
+            this.entityData.set(SEEDS, this.planted.size());
             if (!player.getAbilities().instabuild) {
                 held.shrink(1);
             }
-            server.sendParticles(ParticleTypes.COMPOSTER, getX(), getY() + 0.4D, getZ(), 10, 0.6D, 0.2D, 0.6D, 0.0D);
-            Fx.dirtBurst(server, getX(), getY() + 0.3D, getZ(), 6, 0.5D, 0.03D);
-            Fx.sound(server, getX(), getY(), getZ(), SoundEvents.CROP_PLANTED, 1.0F, 1.0F);
+            int n = this.planted.size();
+            double x = getX();
+            double y = getY();
+            double z = getZ();
+
+            server.sendParticles(ParticleTypes.COMPOSTER, x, y + 0.4D, z, 12, 0.6D, 0.2D, 0.6D, 0.0D);
+            Fx.dirtBurst(server, x, y + 0.3D, z, 8, 0.5D, 0.03D);
+            Fx.sparkle(server, x, y + 0.5D, z, 6 + 3 * n, 0.7D);
+            Fx.shockwave(server, ParticleTypes.HAPPY_VILLAGER, x, y + 0.15D, z, 1.0D);
+            Fx.sound(server, x, y, z, SoundEvents.CROP_PLANTED, 1.0F, 1.0F);
+            Fx.sound(server, x, y, z, SoundEvents.ROOTED_DIRT_PLACE, 1.0F, 0.8F);
+            // The chime climbs with every seed.
+            Fx.sound(server, x, y, z, SoundEvents.AMETHYST_BLOCK_CHIME, 0.9F, 0.7F + 0.15F * n);
+
+            if (n == MAX_SEEDS) {
+                // Full mound: a bigger flourish.
+                Fx.sparkle(server, x, y + 0.8D, z, 30, 1.2D);
+                Fx.shockwave(server, ParticleTypes.HAPPY_VILLAGER, x, y + 0.15D, z, 2.0D);
+                Fx.sound(server, x, y, z, SoundEvents.COMPOSTER_READY, 1.0F, 1.0F);
+                Fx.sound(server, x, y, z, SoundEvents.AMETHYST_BLOCK_RESONATE, 1.0F, 1.2F);
+            }
         }
         return InteractionResult.sidedSuccess(this.level().isClientSide);
     }
 
     private InteractionResult pickUp(Player player) {
         if (this.level() instanceof ServerLevel server) {
-            ItemStack stack = GolemSoilItem.create(getSeeds(), getCrop());
+            ItemStack stack = GolemSoilItem.create(this.planted);
             if (!player.addItem(stack)) {
                 player.drop(stack, false);
             }
-            Fx.dirtBurst(server, getX(), getY() + 0.2D, getZ(), 14, 0.7D, 0.05D);
+            Fx.dirtBurst(server, getX(), getY() + 0.2D, getZ(), 18, 0.7D, 0.05D);
+            Fx.dust(server, getX(), getY() + 0.3D, getZ(), 6, 0.6D);
+            if (!this.planted.isEmpty()) {
+                Fx.sparkle(server, getX(), getY() + 0.6D, getZ(), 8, 0.7D);
+            }
             Fx.sound(server, getX(), getY(), getZ(), SoundEvents.GRAVEL_BREAK, 1.0F, 1.1F);
+            Fx.sound(server, getX(), getY(), getZ(), SoundEvents.ROOTED_DIRT_BREAK, 1.0F, 1.2F);
             this.discard();
         }
         return InteractionResult.sidedSuccess(this.level().isClientSide);
@@ -194,8 +230,59 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
             popOff(server);
             return;
         }
+        long remaining = this.readyAt - now;
+        if (remaining > 0) {
+            growthEffects(server, remaining);
+        }
         if (now >= this.readyAt) {
             hatch(server);
+        }
+    }
+
+    /**
+     * Sparkles while it grows, and a tremor that builds up toward the end:
+     *  - last 30 s: a faint dirt trickle and a low rumble every 1.5 s
+     *  - last 10 s: stronger, every half second, more sparkles
+     *  - last 2 s: the ground shakes constantly, with a shockwave one second before it rises
+     */
+    private void growthEffects(ServerLevel server, long remaining) {
+        int seeds = getSeeds();
+        double x = getX();
+        double y = getY();
+        double z = getZ();
+
+        // Planted seeds give off a gentle glow of sparkles. More seeds, more sparkles.
+        if (seeds > 0 && this.tickCount % 20 == 0) {
+            Fx.sparkle(server, x, y + 0.5D, z, 1 + seeds, 0.8D);
+        }
+
+        if (remaining <= 40L) {
+            if (this.tickCount % 2 == 0) {
+                Fx.dirtBurst(server, x, y + 0.2D, z, 10, 1.0D, 0.06D);
+            }
+            if (this.tickCount % 5 == 0) {
+                Fx.soundVaried(server, x, y, z, SoundEvents.DEEPSLATE_BREAK, 1.2F, 0.5F);
+            }
+            if (seeds > 0 && this.tickCount % 4 == 0) {
+                Fx.sparkle(server, x, y + 0.6D, z, 4 + seeds * 2, 1.0D);
+            }
+            if (remaining == 20L) {
+                Fx.shockwave(server, Fx.dirt(), x, y + 0.1D, z, 2.0D);
+                Fx.sound(server, x, y, z, SoundEvents.GRAVEL_BREAK, 1.3F, 0.4F);
+            }
+        } else if (remaining <= 200L) {
+            if (this.tickCount % 10 == 0) {
+                Fx.dirtBurst(server, x, y + 0.2D, z, 6, 0.9D, 0.04D);
+                Fx.soundVaried(server, x, y, z, SoundEvents.GRAVEL_STEP, 0.9F, 0.5F);
+            }
+            if (seeds > 0 && this.tickCount % 10 == 5) {
+                Fx.sparkle(server, x, y + 0.5D, z, 2 + seeds, 0.9D);
+            }
+        } else if (remaining <= 600L) {
+            if (this.tickCount % 30 == 0) {
+                Fx.dirtBurst(server, x, y + 0.2D, z, 3, 0.8D, 0.02D);
+                Fx.soundVaried(server, x, y, z, SoundEvents.GRAVEL_STEP, 0.5F, 0.6F);
+            }
         }
     }
 
@@ -204,7 +291,7 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
     }
 
     private void popOff(ServerLevel server) {
-        ItemStack stack = GolemSoilItem.create(getSeeds(), getCrop());
+        ItemStack stack = GolemSoilItem.create(this.planted);
         server.addFreshEntity(new ItemEntity(server, getX(), getY() + 0.3D, getZ(), stack));
         this.discard();
     }
@@ -226,14 +313,23 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
             this.readyAt = server.getGameTime() + 40L;
             return;
         }
-        golem.setSoil(getSeeds(), getCrop());
+        golem.setSoil(this.planted);
         golem.startRising();
         golem.setPersistenceRequired();
         server.addFreshEntity(golem);
 
-        Fx.dirtBurst(server, getX(), getY() + 0.2D, getZ(), 90, 1.1D, 0.12D);
-        Fx.sound(server, getX(), getY(), getZ(), SoundEvents.GRAVEL_BREAK, 1.5F, 0.5F);
-        Fx.sound(server, getX(), getY(), getZ(), SoundEvents.DEEPSLATE_BREAK, 1.2F, 0.6F);
+        double x = getX();
+        double y = getY();
+        double z = getZ();
+        Fx.dirtBurst(server, x, y + 0.2D, z, 120, 1.3D, 0.14D);
+        Fx.shockwave(server, Fx.dirt(), x, y + 0.1D, z, 3.0D);
+        Fx.dust(server, x, y + 0.4D, z, 24, 1.2D);
+        if (!this.planted.isEmpty()) {
+            Fx.sparkle(server, x, y + 1.0D, z, 20 + 6 * this.planted.size(), 1.2D);
+        }
+        Fx.sound(server, x, y, z, SoundEvents.GRAVEL_BREAK, 1.5F, 0.5F);
+        Fx.sound(server, x, y, z, SoundEvents.DEEPSLATE_BREAK, 1.3F, 0.5F);
+        Fx.sound(server, x, y, z, SoundEvents.ROOTED_DIRT_BREAK, 1.2F, 0.5F);
         this.discard();
     }
 

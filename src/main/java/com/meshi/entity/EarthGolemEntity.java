@@ -3,6 +3,10 @@ package com.meshi.entity;
 import com.meshi.crop.GolemCrop;
 import com.meshi.registry.ModEntities;
 import com.meshi.util.Fx;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.syncher.EntityDataAccessor;
@@ -67,9 +71,8 @@ public class EarthGolemEntity extends Monster implements GeoEntity {
 
     private final AnimatableInstanceCache cache = GeckoLibUtil.createInstanceCache(this);
 
-    /** Seeds planted in the mound this golem grew from, and which crop. Server side only. */
-    private int seeds = 0;
-    private String cropId = "";
+    /** What was planted in the mound this golem grew from, one entry per seed. Server side only. */
+    private final List<GolemCrop> crops = new ArrayList<>();
     private boolean deathHandled = false;
 
     public EarthGolemEntity(EntityType<? extends EarthGolemEntity> type, Level level) {
@@ -134,10 +137,10 @@ public class EarthGolemEntity extends Monster implements GeoEntity {
     }
 
     /** What was planted in the mound this golem grew from. Any seeds put the crops on its back. */
-    public void setSoil(int seeds, GolemCrop crop) {
-        this.seeds = Math.max(0, seeds);
-        this.cropId = (crop == null || this.seeds <= 0) ? "" : crop.id();
-        setHasCrops(this.seeds > 0);
+    public void setSoil(List<GolemCrop> planted) {
+        this.crops.clear();
+        this.crops.addAll(planted);
+        setHasCrops(!this.crops.isEmpty());
     }
 
     @Override
@@ -145,8 +148,7 @@ public class EarthGolemEntity extends Monster implements GeoEntity {
         super.addAdditionalSaveData(tag);
         tag.putBoolean("HasCrops", hasCrops());
         tag.putInt("RiseTicks", getRiseTicks());
-        tag.putInt("Seeds", this.seeds);
-        tag.putString("Crop", this.cropId);
+        GolemCrop.writeList(tag, this.crops);
     }
 
     @Override
@@ -154,8 +156,8 @@ public class EarthGolemEntity extends Monster implements GeoEntity {
         super.readAdditionalSaveData(tag);
         setHasCrops(tag.getBoolean("HasCrops"));
         setRiseTicks(tag.getInt("RiseTicks"));
-        this.seeds = tag.getInt("Seeds");
-        this.cropId = tag.getString("Crop");
+        this.crops.clear();
+        this.crops.addAll(GolemCrop.readList(tag, SoilMoundEntity.MAX_SEEDS));
     }
 
     @Override
@@ -170,6 +172,20 @@ public class EarthGolemEntity extends Monster implements GeoEntity {
                 }
                 if (this.tickCount % 8 == 0) {
                     this.playSound(SoundEvents.GRAVEL_STEP, 1.0F, 0.5F);
+                }
+                // Sparkles shake loose from the crops on its back while it climbs out.
+                if (!this.crops.isEmpty() && this.tickCount % 4 == 0) {
+                    Fx.sparkle(server, getX(), getY() + 1.8D, getZ(), 2 + this.crops.size(), 0.5D);
+                }
+                // Standing up: one last thud, a shockwave and a cloud of dust.
+                if (getRiseTicks() == 1) {
+                    Fx.shockwave(server, Fx.dirt(), getX(), getY() + 0.1D, getZ(), 2.5D);
+                    Fx.dust(server, getX(), getY() + 0.3D, getZ(), 16, 1.0D);
+                    if (!this.crops.isEmpty()) {
+                        Fx.sparkle(server, getX(), getY() + 1.6D, getZ(), 14, 0.8D);
+                    }
+                    Fx.sound(server, getX(), getY(), getZ(), SoundEvents.DEEPSLATE_BREAK, 1.4F, 0.5F);
+                    Fx.sound(server, getX(), getY(), getZ(), SoundEvents.IRON_GOLEM_DAMAGE, 1.0F, 0.5F);
                 }
             }
             setRiseTicks(getRiseTicks() - 1);
@@ -221,9 +237,12 @@ public class EarthGolemEntity extends Monster implements GeoEntity {
             Vec3 front = this.position()
                     .add(Vec3.directionFromRotation(0.0F, this.yBodyRot).scale(1.5D))
                     .add(0.0D, 0.15D, 0.0D);
-            Fx.dirtBurst(server, front.x, front.y, front.z, 16, 0.4D, 0.07D);
+            Fx.dirtBurst(server, front.x, front.y, front.z, 28, 0.5D, 0.09D);
+            Fx.shockwave(server, Fx.dirt(), front.x, front.y, front.z, 1.6D);
+            Fx.dust(server, front.x, front.y + 0.1D, front.z, 6, 0.4D);
             Fx.sound(server, front.x, front.y, front.z, SoundEvents.GRAVEL_BREAK, 1.2F, 0.6F);
             Fx.sound(server, front.x, front.y, front.z, SoundEvents.ROOTED_DIRT_BREAK, 1.0F, 0.8F);
+            Fx.sound(server, front.x, front.y, front.z, SoundEvents.DEEPSLATE_BREAK, 0.8F, 0.6F);
         }
     }
 
@@ -231,7 +250,11 @@ public class EarthGolemEntity extends Monster implements GeoEntity {
     public boolean hurt(DamageSource source, float amount) {
         boolean hurt = super.hurt(source, amount);
         if (hurt && this.level() instanceof ServerLevel server) {
-            Fx.dirtBurst(server, getX(), getY() + 1.6D, getZ(), 10, 0.5D, 0.05D);
+            Fx.dirtBurst(server, getX(), getY() + 1.6D, getZ(), 14, 0.6D, 0.06D);
+            if (!this.crops.isEmpty() && this.random.nextInt(3) == 0) {
+                // Now and then a little sparkle shakes off its crops.
+                Fx.sparkle(server, getX(), getY() + 1.8D, getZ(), 3, 0.4D);
+            }
         }
         return hurt;
     }
@@ -243,8 +266,14 @@ public class EarthGolemEntity extends Monster implements GeoEntity {
         super.die(source);
         if (this.level() instanceof ServerLevel server) {
             // It crumbles apart as it falls.
-            Fx.dirtBurst(server, getX(), getY() + 1.2D, getZ(), 70, 0.9D, 0.1D);
+            Fx.dirtBurst(server, getX(), getY() + 1.2D, getZ(), 110, 1.0D, 0.12D);
+            Fx.dust(server, getX(), getY() + 1.0D, getZ(), 14, 0.8D);
+            Fx.shockwave(server, Fx.dirt(), getX(), getY() + 0.1D, getZ(), 2.0D);
+            if (!this.crops.isEmpty()) {
+                Fx.sparkle(server, getX(), getY() + 1.6D, getZ(), 12, 0.8D);
+            }
             Fx.sound(server, getX(), getY(), getZ(), SoundEvents.GRAVEL_BREAK, 1.5F, 0.5F);
+            Fx.sound(server, getX(), getY(), getZ(), SoundEvents.DEEPSLATE_BREAK, 1.3F, 0.5F);
         }
     }
 
@@ -261,14 +290,31 @@ public class EarthGolemEntity extends Monster implements GeoEntity {
         }
     }
 
+    /**
+     * Every seed that was planted gives back its own crop (2 per seed). Seeds of the same crop are
+     * added up into one stack, and each stack pops out of the pile with its own sparkle.
+     */
     private void finishDeath(ServerLevel server) {
-        GolemCrop crop = GolemCrop.byId(this.cropId);
-        if (crop != null && this.seeds > 0) {
+        Map<Item, Integer> totals = new LinkedHashMap<>();
+        for (GolemCrop crop : this.crops) {
             Item item = crop.dropItem();
             if (item != null) {
-                ItemStack stack = new ItemStack(item, this.seeds * GolemCrop.CROPS_PER_SEED);
-                server.addFreshEntity(new ItemEntity(server, getX(), getY() + 0.6D, getZ(), stack));
+                totals.merge(item, GolemCrop.CROPS_PER_SEED, Integer::sum);
             }
+        }
+        for (Map.Entry<Item, Integer> entry : totals.entrySet()) {
+            ItemStack stack = new ItemStack(entry.getKey(), entry.getValue());
+            ItemEntity drop = new ItemEntity(server, getX(), getY() + 0.6D, getZ(), stack);
+            drop.setDeltaMovement(
+                    (this.random.nextDouble() - 0.5D) * 0.3D,
+                    0.3D + this.random.nextDouble() * 0.15D,
+                    (this.random.nextDouble() - 0.5D) * 0.3D);
+            server.addFreshEntity(drop);
+        }
+        if (!totals.isEmpty()) {
+            Fx.sparkle(server, getX(), getY() + 0.8D, getZ(), 12 + 4 * totals.size(), 0.7D);
+            Fx.sound(server, getX(), getY(), getZ(), SoundEvents.AMETHYST_BLOCK_CHIME, 1.0F, 1.4F);
+            Fx.sound(server, getX(), getY(), getZ(), SoundEvents.COMPOSTER_READY, 1.0F, 1.0F);
         }
 
         SoilMoundEntity mound = ModEntities.SOIL_MOUND.get().create(server);
@@ -281,8 +327,10 @@ public class EarthGolemEntity extends Monster implements GeoEntity {
             server.addFreshEntity(mound);
         }
 
-        Fx.dirtBurst(server, getX(), getY() + 0.3D, getZ(), 50, 1.2D, 0.08D);
+        Fx.dirtBurst(server, getX(), getY() + 0.3D, getZ(), 70, 1.3D, 0.1D);
+        Fx.shockwave(server, Fx.dirt(), getX(), getY() + 0.1D, getZ(), 2.5D);
         Fx.sound(server, getX(), getY(), getZ(), SoundEvents.GRAVEL_BREAK, 1.2F, 0.6F);
+        Fx.sound(server, getX(), getY(), getZ(), SoundEvents.ROOTED_DIRT_PLACE, 1.2F, 0.6F);
     }
 
     // ---------------------------------------------------------------- sounds
@@ -300,6 +348,11 @@ public class EarthGolemEntity extends Monster implements GeoEntity {
     @Override
     protected void playStepSound(BlockPos pos, BlockState state) {
         this.playSound(SoundEvents.GRAVEL_STEP, 0.8F, 0.6F);
+        // Every heavy footstep thuds and kicks up a little dirt.
+        if (this.level() instanceof ServerLevel server) {
+            Fx.soundVaried(server, getX(), getY(), getZ(), SoundEvents.DEEPSLATE_STEP, 0.7F, 0.5F);
+            Fx.dirtBurst(server, getX(), getY() + 0.1D, getZ(), 5, 0.5D, 0.03D);
+        }
     }
 
     // ---------------------------------------------------------------- animation
