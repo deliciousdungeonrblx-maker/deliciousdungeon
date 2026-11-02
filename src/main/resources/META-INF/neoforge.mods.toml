@@ -1,0 +1,30 @@
+modLoader = "javafml"
+loaderVersion = "[1,)"
+license = "All Rights Reserved"
+
+[[mods]]
+modId = "meshi"
+version = "0.1.0"
+displayName = "Meshi Mobs"
+description = '''Custom Dungeon Meshi mobs for the lore SMP.'''
+
+[[dependencies.meshi]]
+modId = "neoforge"
+type = "required"
+versionRange = "[21.1.0,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.meshi]]
+modId = "minecraft"
+type = "required"
+versionRange = "[1.21.1]"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.meshi]]
+modId = "geckolib"
+type = "required"
+versionRange = "[4.0,)"
+ordering = "AFTER"
+side = "BOTH"
