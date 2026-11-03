@@ -53,7 +53,10 @@ import software.bernie.geckolib.util.GeckoLibUtil;
  * Seeds/Crop - what was planted in the mound it came from. Drops 2 crops per seed when it dies,
  *             then leaves a fresh empty mound where it fell.
  *
+ * GrowTicks - how long the mound it leaves behind takes to rise again (default 24000 = one day).
+ *
  * Test the rise animation with:  /summon meshi:earth_golem ~ ~ ~ {RiseTicks:40}
+ * A golem whose mound only takes 5 minutes after it dies:  /summon meshi:earth_golem ~ ~ ~ {GrowTicks:6000}
  */
 public class EarthGolemEntity extends Monster implements GeoEntity {
     private static final EntityDataAccessor<Boolean> HAS_CROPS =
@@ -73,6 +76,8 @@ public class EarthGolemEntity extends Monster implements GeoEntity {
 
     /** What was planted in the mound this golem grew from, one entry per seed. Server side only. */
     private final List<GolemCrop> crops = new ArrayList<>();
+    /** How long the mound it leaves behind takes to rise again. One day unless set with GrowTicks. */
+    private long growTicks = SoilMoundEntity.GROW_TICKS;
     private boolean deathHandled = false;
 
     public EarthGolemEntity(EntityType<? extends EarthGolemEntity> type, Level level) {
@@ -143,11 +148,17 @@ public class EarthGolemEntity extends Monster implements GeoEntity {
         setHasCrops(!this.crops.isEmpty());
     }
 
+    /** How long the mound this golem leaves behind takes to rise again (20 ticks = 1 second). */
+    public void setGrowTicks(long ticks) {
+        this.growTicks = ticks > 0 ? ticks : SoilMoundEntity.GROW_TICKS;
+    }
+
     @Override
     public void addAdditionalSaveData(CompoundTag tag) {
         super.addAdditionalSaveData(tag);
         tag.putBoolean("HasCrops", hasCrops());
         tag.putInt("RiseTicks", getRiseTicks());
+        tag.putLong("GrowTicks", this.growTicks);
         GolemCrop.writeList(tag, this.crops);
     }
 
@@ -156,6 +167,9 @@ public class EarthGolemEntity extends Monster implements GeoEntity {
         super.readAdditionalSaveData(tag);
         setHasCrops(tag.getBoolean("HasCrops"));
         setRiseTicks(tag.getInt("RiseTicks"));
+        if (tag.contains("GrowTicks")) {
+            setGrowTicks(tag.getLong("GrowTicks"));
+        }
         this.crops.clear();
         this.crops.addAll(GolemCrop.readList(tag, SoilMoundEntity.MAX_SEEDS));
     }
@@ -323,6 +337,7 @@ public class EarthGolemEntity extends Monster implements GeoEntity {
             mound.setPos(getX(), getY(), getZ());
             mound.setYRot(yaw);
             mound.yRotO = yaw;
+            mound.setGrowTicks(this.growTicks);
             mound.startTimer(server.getGameTime());
             server.addFreshEntity(mound);
         }

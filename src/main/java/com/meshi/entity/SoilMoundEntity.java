@@ -36,7 +36,7 @@ import software.bernie.geckolib.util.GeckoLibUtil;
  *
  * While it grows it sparkles, and in the last 30 seconds the ground starts to tremble more and more.
  *
- * Handy test command (a tiny timer so you do not wait a day):
+ * Handy test commands (a shorter timer so you do not wait a day; 6000 ticks = 5 minutes):
  *   /summon meshi:soil_mound ~ ~ ~ {Crops:["cabbage","tomato","carrot"],GrowTicks:200}
  * (The old form {Seeds:2,Crop:"cabbage"} still works.)
  * Only /kill or falling out of the world removes it.
@@ -57,8 +57,8 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
 
     /** Game time at which this mound rises. -1 = timer not started yet. */
     private long readyAt = -1L;
-    /** Only used by the GrowTicks test tag. */
-    private long growTicksOverride = -1L;
+    /** How long this mound takes to rise. Normally one day; the GrowTicks tag changes it (and it is passed on to the golem and back). */
+    private long growTicks = GROW_TICKS;
 
     public SoilMoundEntity(EntityType<? extends SoilMoundEntity> type, Level level) {
         super(type, level);
@@ -85,9 +85,17 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
         this.entityData.set(SEEDS, this.planted.size());
     }
 
-    /** Starts (or restarts) the one-day countdown. */
+    public long getGrowTicks() {
+        return this.growTicks;
+    }
+
+    public void setGrowTicks(long ticks) {
+        this.growTicks = ticks > 0 ? ticks : GROW_TICKS;
+    }
+
+    /** Starts (or restarts) the countdown (one day unless a custom grow time was set). */
     public void startTimer(long gameTime) {
-        this.readyAt = gameTime + GROW_TICKS;
+        this.readyAt = gameTime + this.growTicks;
     }
 
     @Override
@@ -102,13 +110,14 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
             this.readyAt = tag.getLong("ReadyAt");
         }
         if (tag.contains("GrowTicks")) {
-            this.growTicksOverride = tag.getLong("GrowTicks");
+            setGrowTicks(tag.getLong("GrowTicks"));
         }
     }
 
     @Override
     protected void addAdditionalSaveData(CompoundTag tag) {
         GolemCrop.writeList(tag, this.planted);
+        tag.putLong("GrowTicks", this.growTicks);
         if (this.readyAt >= 0) {
             tag.putLong("ReadyAt", this.readyAt);
         }
@@ -197,7 +206,7 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
 
     private InteractionResult pickUp(Player player) {
         if (this.level() instanceof ServerLevel server) {
-            ItemStack stack = GolemSoilItem.create(this.planted);
+            ItemStack stack = GolemSoilItem.create(this.planted, this.growTicks);
             if (!player.addItem(stack)) {
                 player.drop(stack, false);
             }
@@ -223,7 +232,7 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
         }
         long now = server.getGameTime();
         if (this.readyAt < 0) {
-            this.readyAt = now + (this.growTicksOverride >= 0 ? this.growTicksOverride : GROW_TICKS);
+            this.readyAt = now + this.growTicks;
         }
         // If the block it was sitting on disappears, it pops off as an item instead of floating.
         if (this.tickCount % 10 == 0 && !hasSupport()) {
@@ -291,7 +300,7 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
     }
 
     private void popOff(ServerLevel server) {
-        ItemStack stack = GolemSoilItem.create(this.planted);
+        ItemStack stack = GolemSoilItem.create(this.planted, this.growTicks);
         server.addFreshEntity(new ItemEntity(server, getX(), getY() + 0.3D, getZ(), stack));
         this.discard();
     }
@@ -314,6 +323,7 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
             return;
         }
         golem.setSoil(this.planted);
+        golem.setGrowTicks(this.growTicks);
         golem.startRising();
         golem.setPersistenceRequired();
         server.addFreshEntity(golem);
