@@ -37,13 +37,28 @@ public class GolemSoilItem extends Item {
     }
 
     /** A Golem Soil item that remembers every seed planted, in any mix of crops. */
-    public static ItemStack create(List<GolemCrop> crops) {
+    public static ItemStack create(List<GolemCrop> crops, long growTicks) {
         ItemStack stack = new ItemStack(ModItems.GOLEM_SOIL.get());
-        if (!crops.isEmpty()) {
+        boolean customTime = growTicks != SoilMoundEntity.GROW_TICKS;
+        if (!crops.isEmpty() || customTime) {
             List<GolemCrop> copy = new ArrayList<>(crops);
-            CustomData.update(DataComponents.CUSTOM_DATA, stack, tag -> GolemCrop.writeList(tag, copy));
+            CustomData.update(DataComponents.CUSTOM_DATA, stack, tag -> {
+                if (!copy.isEmpty()) {
+                    GolemCrop.writeList(tag, copy);
+                }
+                if (customTime) {
+                    tag.putLong("GrowTicks", growTicks);
+                }
+            });
         }
         return stack;
+    }
+
+    /** The grow time stored on the item (one day if it has no custom time). */
+    public static long growTicksOf(ItemStack stack) {
+        CompoundTag tag = dataOf(stack);
+        long ticks = tag.contains("GrowTicks") ? tag.getLong("GrowTicks") : SoilMoundEntity.GROW_TICKS;
+        return ticks > 0 ? ticks : SoilMoundEntity.GROW_TICKS;
     }
 
     private static CompoundTag dataOf(ItemStack stack) {
@@ -83,6 +98,7 @@ public class GolemSoilItem extends Item {
         mound.yRotO = yaw;
         List<GolemCrop> crops = cropsOf(stack);
         mound.setCrops(crops);
+        mound.setGrowTicks(growTicksOf(stack));
         mound.startTimer(server.getGameTime());
         server.addFreshEntity(mound);
 
