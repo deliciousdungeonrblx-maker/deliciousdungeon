@@ -1,6 +1,7 @@
 package com.meshi;
 
 import com.meshi.entity.EarthGolemEntity;
+import com.meshi.registry.ModBlocks;
 import com.meshi.registry.ModEntities;
 import com.meshi.registry.ModItems;
 import net.minecraft.world.item.CreativeModeTabs;
@@ -14,6 +15,7 @@ public class Meshi {
     public static final String MODID = "meshi";
 
     public Meshi(IEventBus modEventBus) {
+        ModBlocks.BLOCKS.register(modEventBus);
         ModEntities.ENTITY_TYPES.register(modEventBus);
         ModItems.ITEMS.register(modEventBus);
 
@@ -31,6 +33,15 @@ public class Meshi {
         }
         if (event.getTabKey() == CreativeModeTabs.INGREDIENTS) {
             event.accept(ModItems.GOLEM_SOIL);
+            event.accept(ModItems.RAW_SCORPION_MEAT);
+            event.accept(ModItems.SLICED_SCORPION);
+            event.accept(ModItems.MUSHCORPSE);
+            event.accept(ModItems.MUSHBODY);
+            event.accept(ModItems.MUSHFEET);
+        }
+        if (event.getTabKey() == CreativeModeTabs.FOOD_AND_DRINKS) {
+            event.accept(ModItems.HOTPOT);
+            event.accept(ModItems.HOTPOT_SERVING);
         }
     }
 }

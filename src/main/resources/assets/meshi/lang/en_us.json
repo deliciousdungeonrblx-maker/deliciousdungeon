@@ -2,5 +2,13 @@
   "entity.meshi.earth_golem": "Earth Golem",
   "entity.meshi.soil_mound": "Soil Mound",
   "item.meshi.earth_golem_spawn_egg": "Earth Golem Spawn Egg",
-  "item.meshi.golem_soil": "Golem Soil"
+  "item.meshi.golem_soil": "Golem Soil",
+  "item.meshi.raw_scorpion_meat": "Raw Scorpion Meat",
+  "item.meshi.sliced_scorpion": "Sliced Scorpion",
+  "item.meshi.mushcorpse": "Mush Corpse",
+  "item.meshi.mushbody": "Mush Body",
+  "item.meshi.mushfeet": "Mush Feet",
+  "item.meshi.hotpot_serving": "Bowl of Mizutaki",
+  "block.meshi.hotpot": "Giant Scorpion and Walking Mushroom Mizutaki",
+  "message.meshi.hotpot.need_bowl": "You need a bowl to serve this."
 }

@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "servings=4": {
+      "model": "meshi:block/hotpot_full"
+    },
+    "servings=3": {
+      "model": "meshi:block/hotpot_3"
+    },
+    "servings=2": {
+      "model": "meshi:block/hotpot_2"
+    },
+    "servings=1": {
+      "model": "meshi:block/hotpot_1"
+    },
+    "servings=0": {
+      "model": "meshi:block/hotpot_empty"
+    }
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "neoforge:conditions": [
+    {
+      "type": "neoforge:mod_loaded",
+      "modid": "farmersdelight"
+    }
+  ],
+  "type": "farmersdelight:cooking",
+  "experience": 2.0,
+  "cookingtime": 200,
+  "recipe_book_tab": "meals",
+  "ingredients": [
+    {
+      "item": "meshi:sliced_scorpion"
+    },
+    {
+      "item": "meshi:mushbody"
+    },
+    {
+      "item": "meshi:mushfeet"
+    },
+    {
+      "item": "farmersdelight:cabbage"
+    },
+    {
+      "item": "minecraft:potato"
+    },
+    {
+      "item": "minecraft:slime_ball"
+    }
+  ],
+  "result": {
+    "count": 1,
+    "id": "meshi:hotpot"
+  }
+}
