@@ -1,0 +1,91 @@
+{
+  "render_type": "minecraft:cutout",
+  "textures": {
+    "potato": "meshi:block/hotpot_potato",
+    "particle": "meshi:block/hotpot_pot"
+  },
+  "elements": [
+    {
+      "name": "cube",
+      "from": [
+        3,
+        5.2,
+        6.7
+      ],
+      "to": [
+        4,
+        6.2,
+        7.7
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0,
+            0,
+            4,
+            4
+          ],
+          "texture": "#potato"
+        },
+        "east": {
+          "uv": [
+            0,
+            4,
+            4,
+            8
+          ],
+          "texture": "#potato"
+        },
+        "south": {
+          "uv": [
+            4,
+            0,
+            8,
+            4
+          ],
+          "texture": "#potato"
+        },
+        "west": {
+          "uv": [
+            4,
+            4,
+            8,
+            8
+          ],
+          "texture": "#potato"
+        },
+        "up": {
+          "uv": [
+            0,
+            8,
+            4,
+            12
+          ],
+          "texture": "#potato"
+        },
+        "down": {
+          "uv": [
+            8,
+            0,
+            12,
+            4
+          ],
+          "texture": "#potato"
+        }
+      }
+    }
+  ],
+  "transform": {
+    "rotation": [
+      -0.1993679,
+      0.0,
+      0.0,
+      0.9799247
+    ],
+    "origin": [
+      0.21875,
+      0.35625,
+      0.45
+    ]
+  }
+}

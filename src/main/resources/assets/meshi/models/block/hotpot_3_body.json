@@ -1,0 +1,617 @@
+{
+  "render_type": "minecraft:cutout",
+  "textures": {
+    "broth": "meshi:block/hotpot_broth",
+    "cabbage": "meshi:block/hotpot_cabbage",
+    "handles": "meshi:block/hotpot_handles",
+    "pot": "meshi:block/hotpot_pot",
+    "pottop": "meshi:block/hotpot_pottop",
+    "particle": "meshi:block/hotpot_pot"
+  },
+  "elements": [
+    {
+      "name": "rim_n",
+      "from": [
+        2,
+        5,
+        2
+      ],
+      "to": [
+        14,
+        6.5,
+        3
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0,
+            2,
+            6,
+            2.75
+          ],
+          "texture": "#pottop"
+        },
+        "east": {
+          "uv": [
+            6.5,
+            2.5,
+            7,
+            3.25
+          ],
+          "texture": "#pottop"
+        },
+        "south": {
+          "uv": [
+            0,
+            3,
+            6,
+            3.75
+          ],
+          "texture": "#pottop"
+        },
+        "west": {
+          "uv": [
+            3,
+            6.5,
+            3.5,
+            7.25
+          ],
+          "texture": "#pottop"
+        },
+        "up": {
+          "uv": [
+            6,
+            0.5,
+            12,
+            1
+          ],
+          "texture": "#pottop"
+        },
+        "down": {
+          "uv": [
+            6,
+            1,
+            12,
+            1.5
+          ],
+          "texture": "#pottop"
+        }
+      }
+    },
+    {
+      "name": "rim_s",
+      "from": [
+        2,
+        5,
+        13
+      ],
+      "to": [
+        14,
+        6.5,
+        14
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0,
+            0,
+            6,
+            0.75
+          ],
+          "texture": "#pottop"
+        },
+        "east": {
+          "uv": [
+            6,
+            1.5,
+            6.5,
+            2.25
+          ],
+          "texture": "#pottop"
+        },
+        "south": {
+          "uv": [
+            0,
+            1,
+            6,
+            1.75
+          ],
+          "texture": "#pottop"
+        },
+        "west": {
+          "uv": [
+            6,
+            2.5,
+            6.5,
+            3.25
+          ],
+          "texture": "#pottop"
+        },
+        "up": {
+          "uv": [
+            0,
+            6,
+            6,
+            6.5
+          ],
+          "texture": "#pottop"
+        },
+        "down": {
+          "uv": [
+            6,
+            0,
+            12,
+            0.5
+          ],
+          "texture": "#pottop"
+        }
+      }
+    },
+    {
+      "name": "rim_w",
+      "from": [
+        2,
+        5,
+        3
+      ],
+      "to": [
+        3,
+        6.5,
+        13
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            2,
+            6.5,
+            2.5,
+            7.25
+          ],
+          "texture": "#pottop"
+        },
+        "east": {
+          "uv": [
+            5,
+            4,
+            10,
+            4.75
+          ],
+          "texture": "#pottop"
+        },
+        "south": {
+          "uv": [
+            2.5,
+            6.5,
+            3,
+            7.25
+          ],
+          "texture": "#pottop"
+        },
+        "west": {
+          "uv": [
+            5,
+            5,
+            10,
+            5.75
+          ],
+          "texture": "#pottop"
+        },
+        "up": {
+          "uv": [
+            0.5,
+            6.5,
+            1,
+            11.5
+          ],
+          "texture": "#pottop"
+        },
+        "down": {
+          "uv": [
+            1,
+            6.5,
+            1.5,
+            11.5
+          ],
+          "texture": "#pottop"
+        }
+      }
+    },
+    {
+      "name": "rim_e",
+      "from": [
+        13,
+        5,
+        3
+      ],
+      "to": [
+        14,
+        6.5,
+        13
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            1.5,
+            6.5,
+            2,
+            7.25
+          ],
+          "texture": "#pottop"
+        },
+        "east": {
+          "uv": [
+            0,
+            4,
+            5,
+            4.75
+          ],
+          "texture": "#pottop"
+        },
+        "south": {
+          "uv": [
+            6.5,
+            1.5,
+            7,
+            2.25
+          ],
+          "texture": "#pottop"
+        },
+        "west": {
+          "uv": [
+            0,
+            5,
+            5,
+            5.75
+          ],
+          "texture": "#pottop"
+        },
+        "up": {
+          "uv": [
+            6,
+            6,
+            6.5,
+            11
+          ],
+          "texture": "#pottop"
+        },
+        "down": {
+          "uv": [
+            0,
+            6.5,
+            0.5,
+            11.5
+          ],
+          "texture": "#pottop"
+        }
+      }
+    },
+    {
+      "name": "handle_w",
+      "from": [
+        0,
+        3,
+        7
+      ],
+      "to": [
+        2,
+        4,
+        9
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            4,
+            2,
+            6,
+            3
+          ],
+          "texture": "#handles"
+        },
+        "east": {
+          "uv": [
+            4,
+            3,
+            6,
+            4
+          ],
+          "texture": "#handles"
+        },
+        "south": {
+          "uv": [
+            4,
+            4,
+            6,
+            5
+          ],
+          "texture": "#handles"
+        },
+        "west": {
+          "uv": [
+            0,
+            5,
+            2,
+            6
+          ],
+          "texture": "#handles"
+        },
+        "up": {
+          "uv": [
+            2,
+            0,
+            4,
+            2
+          ],
+          "texture": "#handles"
+        },
+        "down": {
+          "uv": [
+            2,
+            2,
+            4,
+            4
+          ],
+          "texture": "#handles"
+        }
+      }
+    },
+    {
+      "name": "handle_e",
+      "from": [
+        14,
+        3,
+        7
+      ],
+      "to": [
+        16,
+        4,
+        9
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0,
+            4,
+            2,
+            5
+          ],
+          "texture": "#handles"
+        },
+        "east": {
+          "uv": [
+            4,
+            0,
+            6,
+            1
+          ],
+          "texture": "#handles"
+        },
+        "south": {
+          "uv": [
+            4,
+            1,
+            6,
+            2
+          ],
+          "texture": "#handles"
+        },
+        "west": {
+          "uv": [
+            2,
+            4,
+            4,
+            5
+          ],
+          "texture": "#handles"
+        },
+        "up": {
+          "uv": [
+            0,
+            0,
+            2,
+            2
+          ],
+          "texture": "#handles"
+        },
+        "down": {
+          "uv": [
+            0,
+            2,
+            2,
+            4
+          ],
+          "texture": "#handles"
+        }
+      }
+    },
+    {
+      "name": "pot",
+      "from": [
+        2,
+        0,
+        2
+      ],
+      "to": [
+        14,
+        5,
+        14
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            6,
+            0,
+            12,
+            2.5
+          ],
+          "texture": "#pot"
+        },
+        "east": {
+          "uv": [
+            6,
+            2.5,
+            12,
+            5
+          ],
+          "texture": "#pot"
+        },
+        "south": {
+          "uv": [
+            6,
+            5,
+            12,
+            7.5
+          ],
+          "texture": "#pot"
+        },
+        "west": {
+          "uv": [
+            6,
+            7.5,
+            12,
+            10
+          ],
+          "texture": "#pot"
+        },
+        "up": {
+          "uv": [
+            0,
+            0,
+            6,
+            6
+          ],
+          "texture": "#pot"
+        },
+        "down": {
+          "uv": [
+            0,
+            6,
+            6,
+            12
+          ],
+          "texture": "#pot"
+        }
+      }
+    },
+    {
+      "name": "broth",
+      "from": [
+        3,
+        3,
+        3
+      ],
+      "to": [
+        13,
+        5.5,
+        13
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            5,
+            0,
+            10,
+            1.25
+          ],
+          "texture": "#broth"
+        },
+        "east": {
+          "uv": [
+            5,
+            1.5,
+            10,
+            2.75
+          ],
+          "texture": "#broth"
+        },
+        "south": {
+          "uv": [
+            5,
+            3,
+            10,
+            4.25
+          ],
+          "texture": "#broth"
+        },
+        "west": {
+          "uv": [
+            5,
+            4.5,
+            10,
+            5.75
+          ],
+          "texture": "#broth"
+        },
+        "up": {
+          "uv": [
+            0,
+            0,
+            5,
+            5
+          ],
+          "texture": "#broth"
+        },
+        "down": {
+          "uv": [
+            0,
+            5,
+            5,
+            10
+          ],
+          "texture": "#broth"
+        }
+      },
+      "neoforge_data": {
+        "block_light": 15,
+        "sky_light": 15
+      }
+    },
+    {
+      "name": "cabbage",
+      "from": [
+        2.7,
+        5.6,
+        3.8
+      ],
+      "to": [
+        6.7,
+        5.6,
+        14
+      ],
+      "faces": {
+        "up": {
+          "uv": [
+            8,
+            13.3333,
+            0,
+            0
+          ],
+          "texture": "#cabbage"
+        }
+      }
+    },
+    {
+      "name": "cabbage",
+      "from": [
+        4.7,
+        5.48,
+        4.2
+      ],
+      "to": [
+        8.7,
+        5.48,
+        14.4
+      ],
+      "faces": {
+        "up": {
+          "uv": [
+            8,
+            13.3333,
+            0,
+            0
+          ],
+          "texture": "#cabbage"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,91 @@
+{
+  "render_type": "minecraft:cutout",
+  "textures": {
+    "mushroom_slice": "meshi:block/hotpot_mushroom_slice",
+    "particle": "meshi:block/hotpot_pot"
+  },
+  "elements": [
+    {
+      "name": "cube",
+      "from": [
+        7.4,
+        5.6254,
+        8.0607
+      ],
+      "to": [
+        9.4,
+        6.1254,
+        10.0607
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            4,
+            0,
+            8,
+            1
+          ],
+          "texture": "#mushroom_slice"
+        },
+        "east": {
+          "uv": [
+            4,
+            2,
+            8,
+            3
+          ],
+          "texture": "#mushroom_slice"
+        },
+        "south": {
+          "uv": [
+            4,
+            4,
+            8,
+            5
+          ],
+          "texture": "#mushroom_slice"
+        },
+        "west": {
+          "uv": [
+            4,
+            6,
+            8,
+            7
+          ],
+          "texture": "#mushroom_slice"
+        },
+        "up": {
+          "uv": [
+            0,
+            0,
+            4,
+            4
+          ],
+          "texture": "#mushroom_slice"
+        },
+        "down": {
+          "uv": [
+            0,
+            4,
+            4,
+            8
+          ],
+          "texture": "#mushroom_slice"
+        }
+      }
+    }
+  ],
+  "transform": {
+    "rotation": [
+      0.1478094,
+      0.0,
+      0.0,
+      0.9890159
+    ],
+    "origin": [
+      0.525,
+      0.367212,
+      0.566295
+    ]
+  }
+}

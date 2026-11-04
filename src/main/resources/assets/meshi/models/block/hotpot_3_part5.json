@@ -1,0 +1,91 @@
+{
+  "render_type": "minecraft:cutout",
+  "textures": {
+    "scorpion": "meshi:block/hotpot_scorpion",
+    "particle": "meshi:block/hotpot_pot"
+  },
+  "elements": [
+    {
+      "name": "scorpion_c",
+      "from": [
+        7,
+        4.3,
+        4.9
+      ],
+      "to": [
+        11.3,
+        6.9,
+        6.2
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0,
+            0,
+            6,
+            3
+          ],
+          "texture": "#scorpion"
+        },
+        "east": {
+          "uv": [
+            6,
+            2,
+            8,
+            5
+          ],
+          "texture": "#scorpion"
+        },
+        "south": {
+          "uv": [
+            0,
+            3,
+            6,
+            6
+          ],
+          "texture": "#scorpion"
+        },
+        "west": {
+          "uv": [
+            6,
+            5,
+            8,
+            8
+          ],
+          "texture": "#scorpion"
+        },
+        "up": {
+          "uv": [
+            0,
+            6,
+            6,
+            8
+          ],
+          "texture": "#scorpion"
+        },
+        "down": {
+          "uv": [
+            6,
+            0,
+            12,
+            2
+          ],
+          "texture": "#scorpion"
+        }
+      }
+    }
+  ],
+  "transform": {
+    "rotation": [
+      -0.2272697,
+      -0.2451187,
+      -0.2745485,
+      0.9016033
+    ],
+    "origin": [
+      0.61875,
+      0.35,
+      0.33125
+    ]
+  }
+}
