@@ -10,5 +10,9 @@
   "item.meshi.mushfeet": "Mush Feet",
   "item.meshi.hotpot_serving": "Bowl of Hotpot",
   "block.meshi.hotpot": "Huge Scorpion and Walking Mushroom Hotpot",
-  "message.meshi.hotpot.need_bowl": "You need a bowl to serve this."
+  "message.meshi.hotpot.need_bowl": "You need a bowl to serve this.",
+  "advancements.meshi.hotpot.prepared.title": "Are you sure this is safe?",
+  "advancements.meshi.hotpot.prepared.description": "Prepare a Huge Scorpion and Walking Mushroom Hotpot.",
+  "advancements.meshi.hotpot.eaten.title": "Ah, dungeon food!",
+  "advancements.meshi.hotpot.eaten.description": "Eat a bowl of hotpot."
 }

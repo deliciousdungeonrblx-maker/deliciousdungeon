@@ -1,0 +1,35 @@
+{
+  "parent": "minecraft:husbandry/root",
+  "display": {
+    "icon": {
+      "id": "meshi:raw_scorpion_meat"
+    },
+    "title": {
+      "translate": "advancements.meshi.hotpot.prepared.title"
+    },
+    "description": {
+      "translate": "advancements.meshi.hotpot.prepared.description"
+    },
+    "frame": "task",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "prepared_hotpot": {
+      "trigger": "minecraft:inventory_changed",
+      "conditions": {
+        "items": [
+          {
+            "items": "meshi:hotpot"
+          }
+        ]
+      }
+    }
+  },
+  "requirements": [
+    [
+      "prepared_hotpot"
+    ]
+  ]
+}

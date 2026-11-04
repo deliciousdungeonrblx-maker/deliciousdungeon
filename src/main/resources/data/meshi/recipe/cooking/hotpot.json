@@ -3,6 +3,10 @@
     {
       "type": "neoforge:mod_loaded",
       "modid": "farmersdelight"
+    },
+    {
+      "type": "neoforge:mod_loaded",
+      "modid": "dungeonsdelight"
     }
   ],
   "type": "farmersdelight:cooking",
@@ -26,7 +30,7 @@
       "item": "minecraft:potato"
     },
     {
-      "item": "minecraft:slime_ball"
+      "item": "dungeonsdelight:slime_noodles"
     }
   ],
   "result": {

@@ -1,0 +1,33 @@
+{
+  "parent": "meshi:hotpot/prepared_hotpot",
+  "display": {
+    "icon": {
+      "id": "meshi:hotpot"
+    },
+    "title": {
+      "translate": "advancements.meshi.hotpot.eaten.title"
+    },
+    "description": {
+      "translate": "advancements.meshi.hotpot.eaten.description"
+    },
+    "frame": "task",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "ate_hotpot": {
+      "trigger": "minecraft:consume_item",
+      "conditions": {
+        "item": {
+          "items": "meshi:hotpot_serving"
+        }
+      }
+    }
+  },
+  "requirements": [
+    [
+      "ate_hotpot"
+    ]
+  ]
+}

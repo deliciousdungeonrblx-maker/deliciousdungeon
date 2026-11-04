@@ -46,11 +46,11 @@ public class ModItems {
 
     // ---- The dish -----------------------------------------------------------------------------------------
 
-    /** Stew-sized meal with a 30 second Glowing buff (stands in for the anime's star jelly). Tweak here. */
+    /** Stew-sized meal with a 1 minute Regeneration buff. Tweak here. */
     private static final FoodProperties HOTPOT_FOOD = new FoodProperties.Builder()
             .nutrition(10)
             .saturationModifier(0.8F)
-            .effect(() -> new MobEffectInstance(MobEffects.GLOWING, 600, 0), 1.0F)
+            .effect(() -> new MobEffectInstance(MobEffects.REGENERATION, 1200, 0), 1.0F)
             .build();
 
     /** One bowl of hotpot, taken from the placed pot. Eating it returns the bowl. */
