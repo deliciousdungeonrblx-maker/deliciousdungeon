@@ -111,7 +111,7 @@ public class HotpotBlock extends Block {
     }
 
     /**
-     * Steam and bubbles while the pot has food in it. A fuller pot steams more; an empty pot is quiet.
+     * Bubbles popping on the broth while the pot has food in it. An empty pot is quiet.
      * (Client side only. Called at random for blocks near the player, so each call spawns a few particles.)
      */
     @Override
@@ -122,30 +122,13 @@ public class HotpotBlock extends Block {
         }
         double cx = pos.getX() + 0.5D;
         double cz = pos.getZ() + 0.5D;
-        double top = pos.getY() + 0.5D; // just above the food, which tops out around 7/16
-
-        // Rising steam: 2 wisps at 1 serving up to 4 at a full pot.
-        int wisps = 1 + servings;
-        for (int i = 0; i < wisps; i++) {
-            level.addParticle(ParticleTypes.CAMPFIRE_COSY_SMOKE,
-                    cx + (random.nextDouble() - 0.5D) * 0.5D, top, cz + (random.nextDouble() - 0.5D) * 0.5D,
-                    (random.nextDouble() - 0.5D) * 0.004D, 0.012D + random.nextDouble() * 0.01D,
-                    (random.nextDouble() - 0.5D) * 0.004D);
-        }
 
         // Bubbles popping on the surface.
-        int bubbles = 1 + random.nextInt(1 + servings);
+        int bubbles = random.nextInt(1 + servings);
         for (int i = 0; i < bubbles; i++) {
             level.addParticle(ParticleTypes.BUBBLE_POP,
                     cx + (random.nextDouble() - 0.5D) * 0.55D, pos.getY() + 0.42D, cz + (random.nextDouble() - 0.5D) * 0.55D,
                     0.0D, 0.0D, 0.0D);
-        }
-
-        // Now and then a little puff of white steam bursts up.
-        if (random.nextInt(4) == 0) {
-            level.addParticle(ParticleTypes.CLOUD,
-                    cx + (random.nextDouble() - 0.5D) * 0.4D, top, cz + (random.nextDouble() - 0.5D) * 0.4D,
-                    0.0D, 0.03D, 0.0D);
         }
     }
 
