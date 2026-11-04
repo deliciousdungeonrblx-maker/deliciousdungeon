@@ -8,7 +8,7 @@
   "item.meshi.mushcorpse": "Mush Corpse",
   "item.meshi.mushbody": "Mush Body",
   "item.meshi.mushfeet": "Mush Feet",
-  "item.meshi.hotpot_serving": "Bowl of Mizutaki",
-  "block.meshi.hotpot": "Giant Scorpion and Walking Mushroom Mizutaki",
+  "item.meshi.hotpot_serving": "Bowl of Hotpot",
+  "block.meshi.hotpot": "Huge Scorpion and Walking Mushroom Hotpot",
   "message.meshi.hotpot.need_bowl": "You need a bowl to serve this."
 }
