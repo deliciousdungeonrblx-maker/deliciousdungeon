@@ -1,0 +1,34 @@
+{
+  "variants": {
+    "armed=true,facing=north": {
+      "model": "meshi:block/scorpion_burrow"
+    },
+    "armed=true,facing=east": {
+      "model": "meshi:block/scorpion_burrow",
+      "y": 90
+    },
+    "armed=true,facing=south": {
+      "model": "meshi:block/scorpion_burrow",
+      "y": 180
+    },
+    "armed=true,facing=west": {
+      "model": "meshi:block/scorpion_burrow",
+      "y": 270
+    },
+    "armed=false,facing=north": {
+      "model": "meshi:block/scorpion_burrow"
+    },
+    "armed=false,facing=east": {
+      "model": "meshi:block/scorpion_burrow",
+      "y": 90
+    },
+    "armed=false,facing=south": {
+      "model": "meshi:block/scorpion_burrow",
+      "y": 180
+    },
+    "armed=false,facing=west": {
+      "model": "meshi:block/scorpion_burrow",
+      "y": 270
+    }
+  }
+}

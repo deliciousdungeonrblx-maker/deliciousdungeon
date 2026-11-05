@@ -2,6 +2,7 @@ package com.meshi.registry;
 
 import com.meshi.Meshi;
 import com.meshi.block.HotpotBlock;
+import com.meshi.block.ScorpionBurrowBlock;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.material.PushReaction;
@@ -10,6 +11,17 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 
 public class ModBlocks {
     public static final DeferredRegister.Blocks BLOCKS = DeferredRegister.createBlocks(Meshi.MODID);
+
+    /** The hole on the side of a wall that a Huge Scorpion crawls out of. Drops nothing when broken. */
+    public static final DeferredBlock<ScorpionBurrowBlock> SCORPION_BURROW =
+            BLOCKS.register("scorpion_burrow", () -> new ScorpionBurrowBlock(
+                    BlockBehaviour.Properties.of()
+                            .strength(0.4F)
+                            .sound(SoundType.STONE)
+                            .noCollission()
+                            .noOcclusion()
+                            .noLootTable()
+                            .pushReaction(PushReaction.DESTROY)));
 
     /** The shared hotpot: 4 servings, right-click with a bowl. */
     public static final DeferredBlock<HotpotBlock> HOTPOT =

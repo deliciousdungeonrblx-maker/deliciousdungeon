@@ -13,5 +13,6 @@ public class MeshiClient {
     public static void registerRenderers(EntityRenderersEvent.RegisterRenderers event) {
         event.registerEntityRenderer(ModEntities.EARTH_GOLEM.get(), EarthGolemRenderer::new);
         event.registerEntityRenderer(ModEntities.SOIL_MOUND.get(), SoilMoundRenderer::new);
+        event.registerEntityRenderer(ModEntities.HUGE_SCORPION.get(), HugeScorpionRenderer::new);
     }
 }

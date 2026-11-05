@@ -1,7 +1,9 @@
 package com.meshi;
 
 import com.meshi.entity.EarthGolemEntity;
+import com.meshi.entity.HugeScorpionEntity;
 import com.meshi.registry.ModBlocks;
+import com.meshi.registry.ModEffects;
 import com.meshi.registry.ModEntities;
 import com.meshi.registry.ModItems;
 import net.minecraft.world.item.CreativeModeTabs;
@@ -16,6 +18,7 @@ public class Meshi {
 
     public Meshi(IEventBus modEventBus) {
         ModBlocks.BLOCKS.register(modEventBus);
+        ModEffects.MOB_EFFECTS.register(modEventBus);
         ModEntities.ENTITY_TYPES.register(modEventBus);
         ModItems.ITEMS.register(modEventBus);
 
@@ -25,11 +28,16 @@ public class Meshi {
 
     private void registerAttributes(EntityAttributeCreationEvent event) {
         event.put(ModEntities.EARTH_GOLEM.get(), EarthGolemEntity.createAttributes().build());
+        event.put(ModEntities.HUGE_SCORPION.get(), HugeScorpionEntity.createAttributes().build());
     }
 
     private void addCreativeTabItems(BuildCreativeModeTabContentsEvent event) {
         if (event.getTabKey() == CreativeModeTabs.SPAWN_EGGS) {
             event.accept(ModItems.EARTH_GOLEM_SPAWN_EGG);
+            event.accept(ModItems.HUGE_SCORPION_SPAWN_EGG);
+        }
+        if (event.getTabKey() == CreativeModeTabs.FUNCTIONAL_BLOCKS) {
+            event.accept(ModItems.SCORPION_BURROW);
         }
         if (event.getTabKey() == CreativeModeTabs.INGREDIENTS) {
             event.accept(ModItems.GOLEM_SOIL);

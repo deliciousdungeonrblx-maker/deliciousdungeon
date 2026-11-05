@@ -20,6 +20,15 @@ public class ModItems {
             ITEMS.register("earth_golem_spawn_egg", () ->
                     new DeferredSpawnEggItem(ModEntities.EARTH_GOLEM, 0x6B4A2F, 0x4E8F2F, new Item.Properties()));
 
+    public static final DeferredItem<DeferredSpawnEggItem> HUGE_SCORPION_SPAWN_EGG =
+            ITEMS.register("huge_scorpion_spawn_egg", () ->
+                    new DeferredSpawnEggItem(ModEntities.HUGE_SCORPION, 0x8E2F5A, 0x7DC43A, new Item.Properties()));
+
+    /** Click the side of a wall to stick a scorpion hole on it. */
+    public static final DeferredItem<BlockItem> SCORPION_BURROW =
+            ITEMS.register("scorpion_burrow", () ->
+                    new BlockItem(ModBlocks.SCORPION_BURROW.get(), new Item.Properties()));
+
     /** The item you get from picking up a soil mound. */
     public static final DeferredItem<GolemSoilItem> GOLEM_SOIL =
             ITEMS.register("golem_soil", () -> new GolemSoilItem(new Item.Properties().stacksTo(16)));

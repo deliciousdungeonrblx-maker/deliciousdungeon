@@ -28,6 +28,11 @@ public final class Fx {
         level.sendParticles(ParticleTypes.HAPPY_VILLAGER, x, y, z, count, spread, spread * 0.6D, spread, 0.0D);
     }
 
+    /** Sickly green droplets of scorpion venom. */
+    public static void venom(ServerLevel level, double x, double y, double z, int count, double spread) {
+        level.sendParticles(ParticleTypes.ITEM_SLIME, x, y, z, count, spread, spread * 0.6D, spread, 0.05D);
+    }
+
     /** A soft dust cloud. */
     public static void dust(ServerLevel level, double x, double y, double z, int count, double spread) {
         level.sendParticles(ParticleTypes.POOF, x, y, z, count, spread, spread * 0.3D, spread, 0.03D);

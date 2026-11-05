@@ -1,0 +1,18 @@
+{
+  "ambientocclusion": false,
+  "render_type": "minecraft:cutout",
+  "textures": {
+    "particle": "meshi:block/scorpion_burrow",
+    "hole": "meshi:block/scorpion_burrow"
+  },
+  "elements": [
+    {
+      "from": [0, 0, 15.9],
+      "to": [16, 16, 15.9],
+      "shade": false,
+      "faces": {
+        "north": { "uv": [0, 0, 16, 16], "texture": "#hole" }
+      }
+    }
+  ]
+}

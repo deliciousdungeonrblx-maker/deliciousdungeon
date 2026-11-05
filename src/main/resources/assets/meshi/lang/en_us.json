@@ -1,7 +1,9 @@
 {
   "entity.meshi.earth_golem": "Earth Golem",
   "entity.meshi.soil_mound": "Soil Mound",
+  "entity.meshi.huge_scorpion": "Huge Scorpion",
   "item.meshi.earth_golem_spawn_egg": "Earth Golem Spawn Egg",
+  "item.meshi.huge_scorpion_spawn_egg": "Huge Scorpion Spawn Egg",
   "item.meshi.golem_soil": "Golem Soil",
   "item.meshi.raw_scorpion_meat": "Raw Scorpion Meat",
   "item.meshi.sliced_scorpion": "Sliced Scorpion",
@@ -10,9 +12,11 @@
   "item.meshi.mushfeet": "Mush Feet",
   "item.meshi.hotpot_serving": "Bowl of Hotpot",
   "block.meshi.hotpot": "Huge Scorpion and Walking Mushroom Hotpot",
+  "block.meshi.scorpion_burrow": "Scorpion Burrow",
   "message.meshi.hotpot.need_bowl": "You need a bowl to serve this.",
   "advancements.meshi.hotpot.prepared.title": "Are you sure this is safe?",
   "advancements.meshi.hotpot.prepared.description": "Prepare a Huge Scorpion and Walking Mushroom Hotpot.",
   "advancements.meshi.hotpot.eaten.title": "Ah, dungeon food!",
-  "advancements.meshi.hotpot.eaten.description": "Eat a bowl of hotpot."
+  "advancements.meshi.hotpot.eaten.description": "Eat a bowl of hotpot.",
+  "effect.meshi.scorpion_venom": "Scorpion Venom"
 }
