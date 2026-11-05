@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.particles.BlockParticleOption;
 import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
@@ -13,6 +14,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySelector;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
@@ -26,6 +28,7 @@ import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
@@ -52,6 +55,8 @@ public class ScorpionBurrowBlock extends Block {
     public static final double TRIGGER_RANGE = 5.0D;
     /** Ticks before the hole can spawn another scorpion (20 ticks = 1 second). 0 = never again. */
     public static final int REARM_TICKS = 20 * 60 * 10;
+    /** A dropped food item this close (on the open side) also wakes the burrow. */
+    public static final double FOOD_LURE_RANGE = 7.0D;
     /** Ticks between two checks for a player nearby. */
     private static final int CHECK_INTERVAL = 10;
 
@@ -136,7 +141,8 @@ public class ScorpionBurrowBlock extends Block {
                 pos.getX() + 0.5D, pos.getY() + 0.5D, pos.getZ() + 0.5D, TRIGGER_RANGE,
                 (Entity e) -> EntitySelector.NO_SPECTATORS.test(e) && isOnOpenSide(pos, dir, e));
 
-        if (player != null && spawnScorpion(level, pos, dir)) {
+        boolean lured = player == null && foodNearby(level, pos, FOOD_LURE_RANGE);
+        if ((player != null || lured) && spawnScorpion(level, pos, dir)) {
             level.setBlock(pos, state.setValue(ARMED, false), 3);
             if (REARM_TICKS > 0) {
                 level.scheduleTick(pos, this, REARM_TICKS);
@@ -171,6 +177,22 @@ public class ScorpionBurrowBlock extends Block {
     }
 
     // ---------------------------------------------------------------- helpers (also used by the scorpion itself)
+
+    /** Anything edible: the scorpions go after dropped food. */
+    public static boolean isFood(ItemEntity item) {
+        return item.isAlive() && item.getItem().has(DataComponents.FOOD);
+    }
+
+    /** Is there dropped food within range of the burrow, on its open side? */
+    public static boolean foodNearby(ServerLevel level, BlockPos pos, double range) {
+        BlockState state = level.getBlockState(pos);
+        if (!(state.getBlock() instanceof ScorpionBurrowBlock)) {
+            return false;
+        }
+        Direction dir = state.getValue(FACING);
+        AABB box = new AABB(pos).inflate(range, 3.0D, range);
+        return !level.getEntitiesOfClass(ItemEntity.class, box, e -> isFood(e) && isOnOpenSide(pos, dir, e)).isEmpty();
+    }
 
     /** The middle of the hole on the wall face, at floor level. */
     public static Vec3 planeOf(BlockPos pos, Direction dir) {

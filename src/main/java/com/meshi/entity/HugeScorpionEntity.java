@@ -20,6 +20,7 @@ import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
@@ -32,9 +33,11 @@ import net.minecraft.world.entity.ai.goal.RandomLookAroundGoal;
 import net.minecraft.world.entity.ai.goal.WaterAvoidingRandomStrollGoal;
 import net.minecraft.world.entity.ai.goal.target.HurtByTargetGoal;
 import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
@@ -92,11 +95,11 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
     public static final double HOP_RANGE = 14.0D;
     /** How far from that burrow it may come out again. */
     public static final double HOP_DEST_RANGE = 24.0D;
-    /** Ticks it will not hop again after coming out of a burrow (12 s). */
-    private static final int HOP_COOLDOWN = 20 * 12;
+    /** Ticks it will not hop again after coming out of a burrow (8 s). */
+    private static final int HOP_COOLDOWN = 20 * 8;
     /** Chance to hop away after landing a sting (hit and run). */
-    private static final float HOP_CHANCE_AFTER_STING = 0.25F;
-    /** It runs for a burrow when its health drops below this share of its maximum. */
+    private static final float HOP_CHANCE_AFTER_STING = 0.4F;
+    /** It always runs for a burrow when its health drops below this share of its maximum. */
     private static final float HOP_FLEE_HEALTH = 0.4F;
     /** While idle it hops about once per this many seconds on average. */
     private static final int HOP_IDLE_ODDS = 45;
@@ -130,6 +133,10 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
     /** The burrow it dives into, and the one it will come out of (null = same one). */
     private BlockPos hopBurrow = null;
     private BlockPos hopDest = null;
+    /** True from the moment it decides to run for a burrow until it is out of the next one: nothing can distract it. */
+    private boolean fleeing = false;
+    /** No burrow was in reach: do not look again before this tick. */
+    private int noBurrowUntil = 0;
 
     public HugeScorpionEntity(EntityType<? extends HugeScorpionEntity> type, Level level) {
         super(type, level);
@@ -167,6 +174,7 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
         this.goalSelector.addGoal(1, new FloatGoal(this));
         this.goalSelector.addGoal(1, new ScorpionHopGoal(this));
         this.goalSelector.addGoal(2, new ScorpionStingGoal(this, 1.1D));
+        this.goalSelector.addGoal(2, new ScorpionScavengeGoal(this));
         this.goalSelector.addGoal(3, new WaterAvoidingRandomStrollGoal(this, 0.7D));
         this.goalSelector.addGoal(4, new LookAtPlayerGoal(this, Player.class, 8.0F));
         this.goalSelector.addGoal(5, new RandomLookAroundGoal(this));
@@ -297,7 +305,71 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
     /** Forget the wish to hop, and wait a while before wanting it again. */
     public void clearHopRequest(int cooldownTicks) {
         this.hopRequested = false;
+        this.fleeing = false;
         this.hopCooldown = Math.max(this.hopCooldown, cooldownTicks);
+    }
+
+    /**
+     * Run for a burrow NOW, whatever the cooldown (badly hurt, or it just grabbed food). It will not be
+     * talked out of it: see isFleeing().
+     */
+    public void forceHop() {
+        if (this.hopState == HOP_STATE_NONE && !isEmerging() && this.tickCount >= this.noBurrowUntil) {
+            this.hopRequested = true;
+            this.hopCooldown = 0;
+            setFleeing(true);
+        }
+    }
+
+    /** The goal could not find a burrow to run to: do not look again for 3 seconds. */
+    public void noteNoBurrow() {
+        this.noBurrowUntil = this.tickCount + 60;
+    }
+
+    /** While true it ignores everything except getting into a burrow: no stinging, no new targets. */
+    public boolean isFleeing() {
+        return this.fleeing;
+    }
+
+    public void setFleeing(boolean value) {
+        this.fleeing = value;
+        if (value) {
+            super.setTarget(null);
+        }
+    }
+
+    /** Nobody can talk a fleeing scorpion into a new target (a hit, or a player walking past). */
+    @Override
+    public void setTarget(LivingEntity target) {
+        if (this.fleeing && target != null) {
+            return;
+        }
+        super.setTarget(target);
+    }
+
+    // ---- food ---------------------------------------------------------------------------------------
+
+    /** Grabs a dropped food item (the whole stack) and sprints for a burrow. It drops it again if killed on the way. */
+    public void stealFood(ItemEntity item) {
+        if (!this.getMainHandItem().isEmpty() || !item.isAlive()) {
+            return;
+        }
+        this.setItemSlot(EquipmentSlot.MAINHAND, item.getItem().copy());
+        this.setDropChance(EquipmentSlot.MAINHAND, 2.0F); // above 1.0 = always drops, whoever kills it
+        item.discard();
+        this.playSound(SoundEvents.ITEM_PICKUP, 0.8F, 0.8F);
+        this.playSound(SoundEvents.SPIDER_AMBIENT, 1.0F, 0.6F);
+        forceHop();
+    }
+
+    /** Eats whatever it is carrying (safe in its burrow) and heals a little. */
+    public void eatCarried() {
+        ItemStack carried = this.getMainHandItem();
+        if (!carried.isEmpty()) {
+            this.setItemSlot(EquipmentSlot.MAINHAND, ItemStack.EMPTY);
+            this.heal(4.0F);
+            this.playSound(SoundEvents.GENERIC_EAT, 1.0F, 0.7F);
+        }
     }
 
     /** True while it is diving into a wall or waiting out of sight inside it. */
@@ -314,7 +386,7 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
         this.hopBurrow = burrow;
         this.hopDest = ScorpionBurrowBlock.pickOtherBurrow(server, burrow, HOP_DEST_RANGE, this.random);
         this.hopState = HOP_STATE_DIVING;
-        this.hopTimer = 30; // safety net, it normally takes about 12 ticks
+        this.hopTimer = 45; // safety net, it normally takes about 12 to 20 ticks
         this.hopRetries = 0;
         setTarget(null);
         this.getNavigation().stop();
@@ -347,8 +419,17 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
             this.setYBodyRot(yaw);
             this.setYHeadRot(yaw);
 
-            double dx = insideX - getX();
-            double dz = insideZ - getZ();
+            // If it arrived at an angle, first scuttle sideways until it is right in front of the hole.
+            double rx = getX() - plane.x;
+            double rz = getZ() - plane.z;
+            double along = rx * dir.getStepX() + rz * dir.getStepZ();
+            double side = -rx * dir.getStepZ() + rz * dir.getStepX();
+            boolean aligning = along > 0.2D && Math.abs(side) > 0.2D;
+            double targetX = aligning ? plane.x + dir.getStepX() * along : insideX;
+            double targetZ = aligning ? plane.z + dir.getStepZ() * along : insideZ;
+
+            double dx = targetX - getX();
+            double dz = targetZ - getZ();
             double dist = Math.sqrt(dx * dx + dz * dz);
             if (dist > 0.06D && this.hopTimer > 0) {
                 double move = Math.min(dist, DIVE_SPEED) / dist;
@@ -363,12 +444,20 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
                 this.setPos(insideX, getY(), insideZ);
                 this.setInvisible(true);
                 this.setSilent(true);
+                eatCarried();
+                this.heal(3.0F); // a rest in the burrow
                 this.hopState = HOP_STATE_HIDDEN;
                 this.hopTimer = 60 + this.random.nextInt(80);
                 Fx.dust(server, plane.x, plane.y + 0.3D, plane.z, 10, 0.6D);
                 Fx.sound(server, plane.x, plane.y, plane.z, SoundEvents.DEEPSLATE_BREAK, 1.0F, 0.6F);
             }
         } else if (this.hopState == HOP_STATE_HIDDEN) {
+            // Food dropped near the burrow it is hiding in: out it comes, right there.
+            if (this.hopTimer > 10 && this.tickCount % 10 == 0 && this.hopBurrow != null
+                    && ScorpionBurrowBlock.foodNearby(server, this.hopBurrow, 9.0D)) {
+                this.hopDest = null;
+                this.hopTimer = 10;
+            }
             if (--this.hopTimer <= 0) {
                 reappear(server);
             }
@@ -387,6 +476,7 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
                 this.hopRetries = 0;
                 this.setInvisible(false);
                 this.setSilent(false);
+                this.fleeing = false;
                 return;
             }
         }
@@ -460,7 +550,7 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
     public boolean hurt(DamageSource source, float amount) {
         boolean hurt = super.hurt(source, amount);
         if (hurt && !this.level().isClientSide && this.getHealth() < this.getMaxHealth() * HOP_FLEE_HEALTH) {
-            requestHop();
+            forceHop(); // guaranteed: no cooldown, nothing distracts it on the way
         }
         return hurt;
     }

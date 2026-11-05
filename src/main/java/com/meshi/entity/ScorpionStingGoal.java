@@ -33,7 +33,7 @@ public class ScorpionStingGoal extends Goal {
     @Override
     public boolean canUse() {
         LivingEntity target = scorpion.getTarget();
-        return target != null && target.isAlive() && !scorpion.isEmerging() && !scorpion.isHidden();
+        return target != null && target.isAlive() && !scorpion.isEmerging() && !scorpion.isHidden() && !scorpion.isFleeing();
     }
 
     @Override
