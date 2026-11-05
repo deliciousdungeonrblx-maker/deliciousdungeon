@@ -2,8 +2,10 @@ package com.meshi.entity;
 
 import com.meshi.registry.ModEffects;
 import com.meshi.util.Fx;
+import com.meshi.block.ScorpionBurrowBlock;
 import java.util.EnumSet;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
@@ -13,12 +15,14 @@ import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
+import net.minecraft.util.Mth;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.goal.FloatGoal;
@@ -28,6 +32,7 @@ import net.minecraft.world.entity.ai.goal.RandomLookAroundGoal;
 import net.minecraft.world.entity.ai.goal.WaterAvoidingRandomStrollGoal;
 import net.minecraft.world.entity.ai.goal.target.HurtByTargetGoal;
 import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
+import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
@@ -52,6 +57,10 @@ import software.bernie.geckolib.util.GeckoLibUtil;
  * on its own, so the model and the hitbox stay together. The emerge animation's own forward slide is
  * ignored on purpose (see HugeScorpionModel), the entity does the moving.
  *
+ * It also fights other hostile mobs that come near, and it likes to move around between burrows: now
+ * and then (after a sting, when it is badly hurt, or just at random while idle) it runs to a burrow
+ * nearby, dives into the wall, waits a few seconds out of sight, and climbs out of a different burrow.
+ *
  * It drops Raw Scorpion Meat (see data/meshi/loot_table/entities/huge_scorpion.json).
  *
  * Test it with:  /summon meshi:huge_scorpion ~ ~ ~
@@ -60,11 +69,11 @@ import software.bernie.geckolib.util.GeckoLibUtil;
 public class HugeScorpionEntity extends Monster implements GeoEntity {
     // ---- Venom: tweak these --------------------------------------------------------------------
     /** How long the venom lasts, in ticks (20 ticks = 1 second). */
-    public static final int VENOM_TICKS = 20 * 20;
+    public static final int VENOM_TICKS = 20 * 8;
     /** Weakness level minus one: 0 = Weakness I, 1 = Weakness II. */
     private static final int WEAKNESS_AMPLIFIER = 0;
-    /** Slowness level minus one: 1 = Slowness II. */
-    private static final int SLOWNESS_AMPLIFIER = 1;
+    /** Slowness level minus one: 0 = Slowness I, 1 = Slowness II. */
+    private static final int SLOWNESS_AMPLIFIER = 0;
 
     // ---- Size and emerging -----------------------------------------------------------------------
     /** The Blockbench model is drawn this many times bigger. Used by HugeScorpionRenderer. */
@@ -75,6 +84,27 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
     public static final double EMERGE_START_INSIDE = 1.7D;
     /** Blocks in front of the wall face where its origin ends up (so its hitbox is clear of the wall). */
     public static final double EMERGE_END_OUTSIDE = 1.25D;
+
+    // ---- Fighting other monsters and hopping between burrows: tweak these ------------------------
+    /** It attacks other hostile mobs (not its own kind) closer than this many blocks. */
+    private static final double HOSTILE_RANGE = 12.0D;
+    /** How far it looks for a burrow to run to. */
+    public static final double HOP_RANGE = 14.0D;
+    /** How far from that burrow it may come out again. */
+    public static final double HOP_DEST_RANGE = 24.0D;
+    /** Ticks it will not hop again after coming out of a burrow (12 s). */
+    private static final int HOP_COOLDOWN = 20 * 12;
+    /** Chance to hop away after landing a sting (hit and run). */
+    private static final float HOP_CHANCE_AFTER_STING = 0.25F;
+    /** It runs for a burrow when its health drops below this share of its maximum. */
+    private static final float HOP_FLEE_HEALTH = 0.4F;
+    /** While idle it hops about once per this many seconds on average. */
+    private static final int HOP_IDLE_ODDS = 45;
+    /** Blocks per tick while it dives into the wall. */
+    private static final double DIVE_SPEED = 0.28D;
+    private static final int HOP_STATE_NONE = 0;
+    private static final int HOP_STATE_DIVING = 2;
+    private static final int HOP_STATE_HIDDEN = 3;
 
     private static final EntityDataAccessor<Integer> EMERGE_TICKS =
             SynchedEntityData.defineId(HugeScorpionEntity.class, EntityDataSerializers.INT);
@@ -91,6 +121,16 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
     /** Chips of the wall block it is coming out of. Server side only. */
     private ParticleOptions emergeChips = null;
 
+    // Hopping between burrows (server side only).
+    private boolean hopRequested = false;
+    private int hopCooldown = 0;
+    private int hopState = HOP_STATE_NONE;
+    private int hopTimer = 0;
+    private int hopRetries = 0;
+    /** The burrow it dives into, and the one it will come out of (null = same one). */
+    private BlockPos hopBurrow = null;
+    private BlockPos hopDest = null;
+
     public HugeScorpionEntity(EntityType<? extends HugeScorpionEntity> type, Level level) {
         super(type, level);
         this.xpReward = 10;
@@ -98,10 +138,10 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
 
     public static AttributeSupplier.Builder createAttributes() {
         return Monster.createMonsterAttributes()
-                .add(Attributes.MAX_HEALTH, 40.0D)           // 20 hearts
-                .add(Attributes.MOVEMENT_SPEED, 0.3D)        // quick (a zombie is 0.23)
-                .add(Attributes.ATTACK_DAMAGE, 4.0D)         // 2 hearts, the venom is the real threat
-                .add(Attributes.ARMOR, 4.0D)                 // hard shell
+                .add(Attributes.MAX_HEALTH, 16.0D)           // 8 hearts (a zombie has 10)
+                .add(Attributes.MOVEMENT_SPEED, 0.27D)       // a little quicker than a zombie (0.23)
+                .add(Attributes.ATTACK_DAMAGE, 2.0D)         // 1 heart
+                .add(Attributes.ARMOR, 2.0D)                 // light shell
                 .add(Attributes.KNOCKBACK_RESISTANCE, 0.3D)
                 .add(Attributes.FOLLOW_RANGE, 24.0D);
     }
@@ -116,15 +156,16 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
 
             @Override
             public boolean canUse() {
-                return HugeScorpionEntity.this.isEmerging();
+                return HugeScorpionEntity.this.isEmerging() || HugeScorpionEntity.this.isHidden();
             }
 
             @Override
             public boolean canContinueToUse() {
-                return HugeScorpionEntity.this.isEmerging();
+                return canUse();
             }
         });
         this.goalSelector.addGoal(1, new FloatGoal(this));
+        this.goalSelector.addGoal(1, new ScorpionHopGoal(this));
         this.goalSelector.addGoal(2, new ScorpionStingGoal(this, 1.1D));
         this.goalSelector.addGoal(3, new WaterAvoidingRandomStrollGoal(this, 0.7D));
         this.goalSelector.addGoal(4, new LookAtPlayerGoal(this, Player.class, 8.0F));
@@ -132,6 +173,11 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
 
         this.targetSelector.addGoal(1, new HurtByTargetGoal(this));
         this.targetSelector.addGoal(2, new NearestAttackableTargetGoal<>(this, Player.class, true));
+        // Other hostile mobs that wander close (zombies, skeletons, ...) are fair game too, but players come first.
+        this.targetSelector.addGoal(3, new NearestAttackableTargetGoal<>(this, Mob.class, 10, true, false,
+                target -> target instanceof Enemy
+                        && !(target instanceof HugeScorpionEntity)
+                        && target.distanceToSqr(this) <= HOSTILE_RANGE * HOSTILE_RANGE));
     }
 
     // ---------------------------------------------------------------- emerging from a wall
@@ -162,7 +208,7 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
         this.emergePlane = plane;
         this.emergeChips = chips;
         setEmergeTicks(EMERGE_DURATION);
-        beginEmergeState();
+        beginUndergroundState();
         if (this.level() instanceof ServerLevel server) {
             // A low rumble and a crack as the stone gives way.
             Fx.sound(server, plane.x, plane.y, plane.z, SoundEvents.DEEPSLATE_BREAK, 1.4F, 0.5F);
@@ -172,7 +218,7 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
     }
 
     /** No collision, no gravity and nothing can hurt it while it is inside the wall. */
-    private void beginEmergeState() {
+    private void beginUndergroundState() {
         this.noPhysics = true;
         this.setNoGravity(true);
         this.setInvulnerable(true);
@@ -196,6 +242,7 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
         }
         this.emergePlane = null;
         this.emergeChips = null;
+        this.hopCooldown = HOP_COOLDOWN;
     }
 
     @Override
@@ -220,12 +267,145 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
                 finishEmerging();
             }
         }
+
+        if (!this.level().isClientSide && this.level() instanceof ServerLevel server) {
+            if (this.hopCooldown > 0) {
+                this.hopCooldown--;
+            }
+            if (this.hopState != HOP_STATE_NONE) {
+                tickHop(server);
+            } else if (getTarget() == null && this.tickCount % 20 == 0 && this.random.nextInt(HOP_IDLE_ODDS) == 0) {
+                requestHop(); // nothing to do: wander off to another burrow
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------- hopping between burrows
+
+    /** Wants to run to a burrow, dive in and come out of another one. Does nothing during the cooldown. */
+    public void requestHop() {
+        if (this.hopState == HOP_STATE_NONE && !isEmerging() && this.hopCooldown <= 0) {
+            this.hopRequested = true;
+        }
+    }
+
+    /** Is it ready to go looking for a burrow right now? (Used by ScorpionHopGoal.) */
+    public boolean isHopRequested() {
+        return this.hopRequested && this.hopCooldown <= 0 && this.hopState == HOP_STATE_NONE && !isEmerging();
+    }
+
+    /** Forget the wish to hop, and wait a while before wanting it again. */
+    public void clearHopRequest(int cooldownTicks) {
+        this.hopRequested = false;
+        this.hopCooldown = Math.max(this.hopCooldown, cooldownTicks);
+    }
+
+    /** True while it is diving into a wall or waiting out of sight inside it. */
+    public boolean isHidden() {
+        return this.hopState != HOP_STATE_NONE;
+    }
+
+    /** It reached the burrow: dive in. It will come out of another burrow nearby if there is one. */
+    public void beginDive(BlockPos burrow) {
+        if (!(this.level() instanceof ServerLevel server)) {
+            return;
+        }
+        this.hopRequested = false;
+        this.hopBurrow = burrow;
+        this.hopDest = ScorpionBurrowBlock.pickOtherBurrow(server, burrow, HOP_DEST_RANGE, this.random);
+        this.hopState = HOP_STATE_DIVING;
+        this.hopTimer = 30; // safety net, it normally takes about 12 ticks
+        this.hopRetries = 0;
+        setTarget(null);
+        this.getNavigation().stop();
+        beginUndergroundState();
+        Vec3 plane = ScorpionBurrowBlock.planeOf(burrow, ScorpionBurrowBlock.facingOf(server, burrow, this.getDirection().getOpposite()));
+        Fx.sound(server, plane.x, plane.y, plane.z, SoundEvents.GRAVEL_BREAK, 1.2F, 0.6F);
+        Fx.sound(server, plane.x, plane.y, plane.z, SoundEvents.SPIDER_AMBIENT, 1.0F, 0.5F);
+    }
+
+    private void tickHop(ServerLevel server) {
+        if (this.hopBurrow == null && this.hopDest == null) {
+            this.discard(); // saved while hiding but no burrow was remembered
+            return;
+        }
+        this.setDeltaMovement(Vec3.ZERO);
+
+        if (this.hopState == HOP_STATE_DIVING) {
+            if (!(server.getBlockState(this.hopBurrow).getBlock() instanceof ScorpionBurrowBlock)) {
+                this.discard(); // the burrow was broken while it was diving into it
+                return;
+            }
+            Direction dir = ScorpionBurrowBlock.facingOf(server, this.hopBurrow, Direction.NORTH);
+            Vec3 plane = ScorpionBurrowBlock.planeOf(this.hopBurrow, dir);
+            double insideX = plane.x - dir.getStepX() * EMERGE_START_INSIDE;
+            double insideZ = plane.z - dir.getStepZ() * EMERGE_START_INSIDE;
+
+            // Turn to face the wall, then scuttle straight into it.
+            float yaw = Mth.approachDegrees(this.getYRot(), dir.getOpposite().toYRot(), 40.0F);
+            this.setYRot(yaw);
+            this.setYBodyRot(yaw);
+            this.setYHeadRot(yaw);
+
+            double dx = insideX - getX();
+            double dz = insideZ - getZ();
+            double dist = Math.sqrt(dx * dx + dz * dz);
+            if (dist > 0.06D && this.hopTimer > 0) {
+                double move = Math.min(dist, DIVE_SPEED) / dist;
+                this.setPos(getX() + dx * move, getY(), getZ() + dz * move);
+                if (this.hopTimer % 2 == 0) {
+                    ParticleOptions chips = ScorpionBurrowBlock.chipsFor(server, this.hopBurrow, dir);
+                    server.sendParticles(chips, plane.x, plane.y + 0.4D, plane.z, 10, 0.6D, 0.4D, 0.6D, 0.05D);
+                }
+                this.hopTimer--;
+            } else {
+                // Gone: out of sight, silent, and waiting in the wall for a few seconds.
+                this.setPos(insideX, getY(), insideZ);
+                this.setInvisible(true);
+                this.setSilent(true);
+                this.hopState = HOP_STATE_HIDDEN;
+                this.hopTimer = 60 + this.random.nextInt(80);
+                Fx.dust(server, plane.x, plane.y + 0.3D, plane.z, 10, 0.6D);
+                Fx.sound(server, plane.x, plane.y, plane.z, SoundEvents.DEEPSLATE_BREAK, 1.0F, 0.6F);
+            }
+        } else if (this.hopState == HOP_STATE_HIDDEN) {
+            if (--this.hopTimer <= 0) {
+                reappear(server);
+            }
+        }
+    }
+
+    /** Comes out of the other burrow (or the one it went into if there is no other, or no room). */
+    private void reappear(ServerLevel server) {
+        BlockPos[] options = {this.hopDest, this.hopBurrow};
+        boolean force = this.hopRetries > 6;
+        for (BlockPos pos : options) {
+            if (pos != null && ScorpionBurrowBlock.placeEmerging(server, pos, server.getBlockState(pos), this, !force)) {
+                this.hopState = HOP_STATE_NONE;
+                this.hopBurrow = null;
+                this.hopDest = null;
+                this.hopRetries = 0;
+                this.setInvisible(false);
+                this.setSilent(false);
+                return;
+            }
+        }
+        if (force) {
+            this.discard(); // both burrows are gone
+            return;
+        }
+        this.hopRetries++;
+        this.hopTimer = 40; // no room in front of the burrows right now, try again in 2 seconds
     }
 
     @Override
     public void addAdditionalSaveData(CompoundTag tag) {
         super.addAdditionalSaveData(tag);
         tag.putInt("EmergeTicks", getEmergeTicks());
+        tag.putInt("HopState", this.hopState);
+        tag.putInt("HopTimer", this.hopTimer);
+        putPos(tag, "HopBurrow", this.hopBurrow);
+        putPos(tag, "HopDest", this.hopDest);
     }
 
     @Override
@@ -233,7 +413,17 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
         super.readAdditionalSaveData(tag);
         setEmergeTicks(tag.getInt("EmergeTicks"));
         if (isEmerging()) {
-            beginEmergeState();
+            beginUndergroundState();
+        }
+        this.hopBurrow = getPos(tag, "HopBurrow");
+        this.hopDest = getPos(tag, "HopDest");
+        if (tag.getInt("HopState") >= HOP_STATE_DIVING) {
+            // Saved while diving or hiding: pick up as hidden, and come out soon.
+            this.hopState = HOP_STATE_HIDDEN;
+            this.hopTimer = Math.min(Math.max(tag.getInt("HopTimer"), 20), 60);
+            beginUndergroundState();
+            this.setInvisible(true);
+            this.setSilent(true);
         }
     }
 
@@ -258,8 +448,21 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
             living.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, VENOM_TICKS, WEAKNESS_AMPLIFIER), this);
             living.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, VENOM_TICKS, SLOWNESS_AMPLIFIER), this);
             stingEffects(living);
+            if (this.random.nextFloat() < HOP_CHANCE_AFTER_STING) {
+                requestHop(); // hit and run
+            }
         }
         return hit;
+    }
+
+    /** Badly hurt: run for a burrow. */
+    @Override
+    public boolean hurt(DamageSource source, float amount) {
+        boolean hurt = super.hurt(source, amount);
+        if (hurt && !this.level().isClientSide && this.getHealth() < this.getMaxHealth() * HOP_FLEE_HEALTH) {
+            requestHop();
+        }
+        return hurt;
     }
 
     /** Called when the sting starts: a hiss as the tail snaps back. */
@@ -312,6 +515,17 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
     @Override
     protected void playStepSound(BlockPos pos, BlockState state) {
         this.playSound(SoundEvents.SPIDER_STEP, 0.6F, 0.7F);
+    }
+
+    private static void putPos(CompoundTag tag, String key, BlockPos pos) {
+        if (pos != null) {
+            tag.putIntArray(key, new int[] {pos.getX(), pos.getY(), pos.getZ()});
+        }
+    }
+
+    private static BlockPos getPos(CompoundTag tag, String key) {
+        int[] a = tag.getIntArray(key);
+        return a.length == 3 ? new BlockPos(a[0], a[1], a[2]) : null;
     }
 
     // ---------------------------------------------------------------- animation

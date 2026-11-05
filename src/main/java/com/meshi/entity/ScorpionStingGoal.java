@@ -13,8 +13,8 @@ public class ScorpionStingGoal extends Goal {
     private static final int SWING_TICKS = 10;
     /** Ticks until the stinger lands (0.25 s into the animation). */
     private static final int HIT_DELAY = 5;
-    /** Ticks between the start of one sting and the start of the next (1.25 s). */
-    private static final int ATTACK_COOLDOWN = 25;
+    /** Ticks between the start of one sting and the start of the next (2 s). */
+    private static final int ATTACK_COOLDOWN = 40;
 
     private final HugeScorpionEntity scorpion;
     private final double speed;
@@ -33,7 +33,7 @@ public class ScorpionStingGoal extends Goal {
     @Override
     public boolean canUse() {
         LivingEntity target = scorpion.getTarget();
-        return target != null && target.isAlive() && !scorpion.isEmerging();
+        return target != null && target.isAlive() && !scorpion.isEmerging() && !scorpion.isHidden();
     }
 
     @Override

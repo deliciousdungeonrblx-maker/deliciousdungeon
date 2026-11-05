@@ -2,9 +2,12 @@ package com.meshi.block;
 
 import com.meshi.entity.HugeScorpionEntity;
 import com.meshi.registry.ModEntities;
+import java.util.ArrayList;
+import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.particles.BlockParticleOption;
+import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
@@ -151,40 +154,109 @@ public class ScorpionBurrowBlock extends Block {
     }
 
     /**
-     * Puts a scorpion inside the wall behind the hole, facing out, and lets it climb out. Returns false
-     * (and spawns nothing) if there is no room for it in front of the wall.
+     * Creates a scorpion inside the wall behind the hole and lets it climb out. Returns false (and
+     * spawns nothing) if there is no room for it in front of the wall.
      */
     private boolean spawnScorpion(ServerLevel level, BlockPos pos, Direction dir) {
         HugeScorpionEntity scorpion = ModEntities.HUGE_SCORPION.get().create(level);
         if (scorpion == null) {
             return false;
         }
-
-        // The middle of the hole on the wall face, at floor level.
-        double px = pos.getX() + 0.5D - dir.getStepX() * 0.5D;
-        double py = pos.getY();
-        double pz = pos.getZ() + 0.5D - dir.getStepZ() * 0.5D;
-        float yaw = dir.toYRot();
-
-        // Is there room where it will end up?
-        scorpion.moveTo(px + dir.getStepX() * HugeScorpionEntity.EMERGE_END_OUTSIDE, py,
-                pz + dir.getStepZ() * HugeScorpionEntity.EMERGE_END_OUTSIDE, yaw, 0.0F);
-        if (!level.noCollision(scorpion)) {
+        if (!placeEmerging(level, pos, level.getBlockState(pos), scorpion, true)) {
             scorpion.discard();
             return false;
         }
+        level.addFreshEntity(scorpion);
+        return true;
+    }
+
+    // ---------------------------------------------------------------- helpers (also used by the scorpion itself)
+
+    /** The middle of the hole on the wall face, at floor level. */
+    public static Vec3 planeOf(BlockPos pos, Direction dir) {
+        return new Vec3(pos.getX() + 0.5D - dir.getStepX() * 0.5D, pos.getY(), pos.getZ() + 0.5D - dir.getStepZ() * 0.5D);
+    }
+
+    /** Which way the burrow at pos faces, or the fallback if there is no burrow there any more. */
+    public static Direction facingOf(ServerLevel level, BlockPos pos, Direction fallback) {
+        BlockState state = level.getBlockState(pos);
+        return state.getBlock() instanceof ScorpionBurrowBlock ? state.getValue(FACING) : fallback;
+    }
+
+    /** Where a scorpion stands in front of the hole, or null if there is no burrow at pos. */
+    public static Vec3 frontSpot(ServerLevel level, BlockPos pos) {
+        BlockState state = level.getBlockState(pos);
+        if (!(state.getBlock() instanceof ScorpionBurrowBlock)) {
+            return null;
+        }
+        Direction dir = state.getValue(FACING);
+        Vec3 plane = planeOf(pos, dir);
+        return plane.add(dir.getStepX() * HugeScorpionEntity.EMERGE_END_OUTSIDE, 0.0D,
+                dir.getStepZ() * HugeScorpionEntity.EMERGE_END_OUTSIDE);
+    }
+
+    /** Wall chips for the dust that comes off a burrow. */
+    public static ParticleOptions chipsFor(ServerLevel level, BlockPos pos, Direction dir) {
+        return new BlockParticleOption(ParticleTypes.BLOCK, level.getBlockState(pos.relative(dir.getOpposite())));
+    }
+
+    /** Every loaded burrow within rangeXZ blocks sideways and rangeY blocks up or down of center. */
+    public static List<BlockPos> findBurrows(ServerLevel level, BlockPos center, double rangeXZ, int rangeY) {
+        int r = (int) Math.ceil(rangeXZ);
+        List<BlockPos> found = new ArrayList<>();
+        for (BlockPos p : BlockPos.betweenClosed(center.offset(-r, -rangeY, -r), center.offset(r, rangeY, r))) {
+            if (level.isLoaded(p) && level.getBlockState(p).getBlock() instanceof ScorpionBurrowBlock
+                    && p.distSqr(center) <= rangeXZ * rangeXZ + (double) rangeY * rangeY) {
+                found.add(p.immutable());
+            }
+        }
+        return found;
+    }
+
+    /** A random burrow near "from" other than "from" itself, or null if there is none. */
+    public static BlockPos pickOtherBurrow(ServerLevel level, BlockPos from, double range, RandomSource random) {
+        List<BlockPos> burrows = findBurrows(level, from, range, 12);
+        burrows.remove(from);
+        return burrows.isEmpty() ? null : burrows.get(random.nextInt(burrows.size()));
+    }
+
+    /**
+     * Puts the scorpion inside the wall behind the burrow at pos, facing out, and starts its climb out.
+     * With checkRoom it first makes sure there is space in front of the wall, and if not it returns false
+     * and leaves the scorpion exactly where it was.
+     */
+    public static boolean placeEmerging(ServerLevel level, BlockPos pos, BlockState state,
+                                        HugeScorpionEntity scorpion, boolean checkRoom) {
+        if (!(state.getBlock() instanceof ScorpionBurrowBlock)) {
+            return false;
+        }
+        Direction dir = state.getValue(FACING);
+        Vec3 plane = planeOf(pos, dir);
+        float yaw = dir.toYRot();
+
+        if (checkRoom) {
+            double ox = scorpion.getX();
+            double oy = scorpion.getY();
+            double oz = scorpion.getZ();
+            float oyaw = scorpion.getYRot();
+            float opitch = scorpion.getXRot();
+            scorpion.moveTo(plane.x + dir.getStepX() * HugeScorpionEntity.EMERGE_END_OUTSIDE, plane.y,
+                    plane.z + dir.getStepZ() * HugeScorpionEntity.EMERGE_END_OUTSIDE, yaw, 0.0F);
+            boolean free = level.noCollision(scorpion);
+            if (!free) {
+                scorpion.moveTo(ox, oy, oz, oyaw, opitch);
+                return false;
+            }
+        }
 
         // It starts inside the wall, facing out.
-        scorpion.moveTo(px - dir.getStepX() * HugeScorpionEntity.EMERGE_START_INSIDE, py,
-                pz - dir.getStepZ() * HugeScorpionEntity.EMERGE_START_INSIDE, yaw, 0.0F);
+        scorpion.moveTo(plane.x - dir.getStepX() * HugeScorpionEntity.EMERGE_START_INSIDE, plane.y,
+                plane.z - dir.getStepZ() * HugeScorpionEntity.EMERGE_START_INSIDE, yaw, 0.0F);
         scorpion.setYBodyRot(yaw);
         scorpion.setYHeadRot(yaw);
         scorpion.yBodyRotO = yaw;
         scorpion.yHeadRotO = yaw;
-
-        BlockState wall = level.getBlockState(pos.relative(dir.getOpposite()));
-        scorpion.startEmerging(new Vec3(px, py, pz), new BlockParticleOption(ParticleTypes.BLOCK, wall));
-        level.addFreshEntity(scorpion);
+        scorpion.startEmerging(plane, chipsFor(level, pos, dir));
         return true;
     }
 }
