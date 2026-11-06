@@ -185,6 +185,7 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
         this.targetSelector.addGoal(3, new NearestAttackableTargetGoal<>(this, Mob.class, 10, true, false,
                 target -> target instanceof Enemy
                         && !(target instanceof HugeScorpionEntity)
+                        && !(target instanceof WalkingMushroomEntity) // they only bounce off it anyway
                         && target.distanceToSqr(this) <= HOSTILE_RANGE * HOSTILE_RANGE));
     }
 

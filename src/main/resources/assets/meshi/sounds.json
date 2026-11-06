@@ -1,0 +1,78 @@
+{
+  "mushroom_squeak": {
+    "sounds": [
+      "meshi:mushroom/squeak1",
+      "meshi:mushroom/squeak2",
+      "meshi:mushroom/squeak3"
+    ],
+    "subtitle": "subtitles.meshi.mushroom_squeak"
+  },
+  "mushroom_hurt": {
+    "sounds": [
+      "meshi:mushroom/hurt1",
+      "meshi:mushroom/hurt2"
+    ],
+    "subtitle": "subtitles.meshi.mushroom_hurt"
+  },
+  "mushroom_pop": {
+    "sounds": [
+      "meshi:mushroom/pop"
+    ],
+    "subtitle": "subtitles.meshi.mushroom_pop"
+  },
+  "mushroom_snore": {
+    "sounds": [
+      "meshi:mushroom/snore"
+    ],
+    "subtitle": "subtitles.meshi.mushroom_snore"
+  },
+  "mushroom_yawn": {
+    "sounds": [
+      "meshi:mushroom/yawn"
+    ],
+    "subtitle": "subtitles.meshi.mushroom_yawn"
+  },
+  "mushroom_happy": {
+    "sounds": [
+      "meshi:mushroom/happy"
+    ],
+    "subtitle": "subtitles.meshi.mushroom_happy"
+  },
+  "mushroom_step": {
+    "sounds": [
+      "meshi:mushroom/step1",
+      "meshi:mushroom/step2"
+    ],
+    "subtitle": "subtitles.meshi.mushroom_step"
+  },
+  "mushroom_slice": {
+    "sounds": [
+      "meshi:mushroom/slice"
+    ],
+    "subtitle": "subtitles.meshi.mushroom_slice"
+  },
+  "mushroom_alarm": {
+    "sounds": [
+      "meshi:mushroom/alarm"
+    ],
+    "subtitle": "subtitles.meshi.mushroom_alarm"
+  },
+  "mushroom_trip": {
+    "sounds": [
+      "meshi:mushroom/trip"
+    ],
+    "subtitle": "subtitles.meshi.mushroom_trip"
+  },
+  "mushroom_bonk": {
+    "sounds": [
+      "meshi:mushroom/bonk"
+    ],
+    "subtitle": "subtitles.meshi.mushroom_bonk"
+  },
+  "mushroom_attack": {
+    "sounds": [
+      "meshi:mushroom/attack"
+    ],
+    "subtitle": "subtitles.meshi.mushroom_attack"
+  }
+}

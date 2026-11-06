@@ -18,5 +18,20 @@
   "advancements.meshi.hotpot.prepared.description": "Prepare a Huge Scorpion and Walking Mushroom Hotpot.",
   "advancements.meshi.hotpot.eaten.title": "Ah, dungeon food!",
   "advancements.meshi.hotpot.eaten.description": "Eat a bowl of hotpot.",
-  "effect.meshi.scorpion_venom": "Scorpion Venom"
+  "effect.meshi.scorpion_venom": "Scorpion Venom",
+  "entity.meshi.walking_mushroom": "Walking Mushroom",
+  "item.meshi.walking_mushroom_spawn_egg": "Walking Mushroom Spawn Egg",
+  "message.meshi.walking_mushroom.slice_hint": "Slice it from above: swing a blade while falling!",
+  "subtitles.meshi.mushroom_squeak": "Walking Mushroom squeaks",
+  "subtitles.meshi.mushroom_hurt": "Walking Mushroom boings",
+  "subtitles.meshi.mushroom_pop": "Walking Mushroom pops up",
+  "subtitles.meshi.mushroom_snore": "Walking Mushroom snores",
+  "subtitles.meshi.mushroom_yawn": "Walking Mushroom wakes up",
+  "subtitles.meshi.mushroom_happy": "Walking Mushroom trills",
+  "subtitles.meshi.mushroom_step": "Walking Mushroom pats along",
+  "subtitles.meshi.mushroom_slice": "Walking Mushroom is sliced",
+  "subtitles.meshi.mushroom_alarm": "Walking Mushroom sounds the alarm",
+  "subtitles.meshi.mushroom_trip": "Walking Mushroom trips",
+  "subtitles.meshi.mushroom_bonk": "Walking Mushroom is bonked",
+  "subtitles.meshi.mushroom_attack": "Walking Mushroom headbutts"
 }

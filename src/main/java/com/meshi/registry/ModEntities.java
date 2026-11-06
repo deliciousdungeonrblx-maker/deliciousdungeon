@@ -4,6 +4,7 @@ import com.meshi.Meshi;
 import com.meshi.entity.EarthGolemEntity;
 import com.meshi.entity.HugeScorpionEntity;
 import com.meshi.entity.SoilMoundEntity;
+import com.meshi.entity.WalkingMushroomEntity;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
@@ -30,6 +31,14 @@ public class ModEntities {
                             .sized(2.4F, 1.2F)
                             .clientTrackingRange(10)
                             .build("huge_scorpion"));
+
+    // The model is 0.5 wide and about 1.1 tall (17.75 pixels), so the hitbox is 0.5 x 1.1.
+    public static final DeferredHolder<EntityType<?>, EntityType<WalkingMushroomEntity>> WALKING_MUSHROOM =
+            ENTITY_TYPES.register("walking_mushroom", () ->
+                    EntityType.Builder.<WalkingMushroomEntity>of(WalkingMushroomEntity::new, MobCategory.MONSTER)
+                            .sized(0.5F, 1.1F)
+                            .clientTrackingRange(8)
+                            .build("walking_mushroom"));
 
     // The mound model lies flat, about 3 blocks wide and under half a block tall. This is the
     // clickable area in its middle: 2.0 wide, 0.6 tall.
