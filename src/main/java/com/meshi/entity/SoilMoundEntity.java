@@ -27,50 +27,36 @@ import software.bernie.geckolib.animatable.instance.AnimatableInstanceCache;
 import software.bernie.geckolib.animation.AnimatableManager;
 import software.bernie.geckolib.util.GeckoLibUtil;
 
-/**
- * The soil mound. It is built like a decoration, not a mob:
- *  - nothing can hurt it or fight it (players cannot even target it), and it never moves;
- *  - right-click with a plantable item to add a seed (up to 4, any mix of crops);
- *  - right-click with an empty hand to pick it up as a Golem Soil item;
- *  - one Minecraft day (24000 ticks) after it was placed it rises as an earth golem.
- *
- * While it grows it sparkles, and in the last 30 seconds the ground starts to tremble more and more.
- *
- * Handy test commands (a shorter timer so you do not wait a day; 6000 ticks = 5 minutes):
- *   /summon meshi:soil_mound ~ ~ ~ {Crops:["cabbage","tomato","carrot"],GrowTicks:200}
- * (The old form {Seeds:2,Crop:"cabbage"} still works.)
- * Only /kill or falling out of the world removes it.
- */
+// soil mound, acts like decoration not a mob: nothing can hurt or target it, never moves
+// right click w/ plantable item = add seed (max 4, any mix), empty hand = pick up as golem soil
+// 24000 ticks (1 day) after placing it rises as a golem. sparkles while growing, ground trembles in the last 30s
+// test: /summon meshi:soil_mound ~ ~ ~ {Crops:["cabbage","tomato"],GrowTicks:200}
 public class SoilMoundEntity extends Entity implements GeoEntity {
     public static final int MAX_SEEDS = 4;
-    /** One full Minecraft day. */
     public static final long GROW_TICKS = 24000L;
 
-    /** Only the number of seeds is synced to clients (the texture depends on it). */
+    // only the seed count is synced (texture depends on it)
     private static final EntityDataAccessor<Integer> SEEDS =
             SynchedEntityData.defineId(SoilMoundEntity.class, EntityDataSerializers.INT);
 
     private final AnimatableInstanceCache cache = GeckoLibUtil.createInstanceCache(this);
 
-    /** What was planted, one entry per seed, in the order they went in. The server keeps the real list. */
     private final List<GolemCrop> planted = new ArrayList<>();
 
-    /** Game time at which this mound rises. -1 = timer not started yet. */
+    // -1 = timer not started yet
     private long readyAt = -1L;
-    /** How long this mound takes to rise. Normally one day; the GrowTicks tag changes it (and it is passed on to the golem and back). */
+    // grow time, GrowTicks tag changes it (gets passed to the golem n back)
     private long growTicks = GROW_TICKS;
 
     public SoilMoundEntity(EntityType<? extends SoilMoundEntity> type, Level level) {
         super(type, level);
     }
 
-    // ---------------------------------------------------------------- state
 
     public int getSeeds() {
         return this.entityData.get(SEEDS);
     }
 
-    /** A copy of the planted crops, one entry per seed. */
     public List<GolemCrop> getCrops() {
         return new ArrayList<>(this.planted);
     }
@@ -93,7 +79,6 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
         this.growTicks = ticks > 0 ? ticks : GROW_TICKS;
     }
 
-    /** Starts (or restarts) the countdown (one day unless a custom grow time was set). */
     public void startTimer(long gameTime) {
         this.readyAt = gameTime + this.growTicks;
     }
@@ -123,21 +108,17 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
         }
     }
 
-    // ---------------------------------------------------------------- untouchable and frozen
 
-    /** Players cannot target or punch it at all. */
     @Override
     public boolean isAttackable() {
         return false;
     }
 
-    /** It can still be right-clicked. */
     @Override
     public boolean isPickable() {
         return true;
     }
 
-    /** Explosions, projectiles, lava and everything else that tries to damage it does nothing. */
     @Override
     public boolean hurt(DamageSource source, float amount) {
         return false;
@@ -148,7 +129,6 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
         return true;
     }
 
-    // ---------------------------------------------------------------- right click
 
     @Override
     public InteractionResult interact(Player player, InteractionHand hand) {
@@ -157,18 +137,16 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
         if (crop != null) {
             return plant(player, held, crop);
         }
-        // Empty hand picks it up. Both hands must be empty so a seed in the off hand still plants.
+        // both hands empty so a seed in the offhand still plants
         if (held.isEmpty() && hand == InteractionHand.MAIN_HAND && player.getOffhandItem().isEmpty()) {
             return pickUp(player);
         }
         return InteractionResult.PASS;
     }
 
-    /** Any plantable item can go in, in any mix, until the mound is full. */
     private InteractionResult plant(Player player, ItemStack held, GolemCrop crop) {
         if (getSeeds() >= MAX_SEEDS) {
             if (this.level() instanceof ServerLevel server) {
-                // A dull thud so it is clear the mound is full.
                 Fx.sound(server, getX(), getY(), getZ(), SoundEvents.GRAVEL_HIT, 1.0F, 0.6F);
             }
             return InteractionResult.FAIL;
@@ -190,11 +168,9 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
             Fx.shockwave(server, ParticleTypes.HAPPY_VILLAGER, x, y + 0.15D, z, 1.0D);
             Fx.sound(server, x, y, z, SoundEvents.CROP_PLANTED, 1.0F, 1.0F);
             Fx.sound(server, x, y, z, SoundEvents.ROOTED_DIRT_PLACE, 1.0F, 0.8F);
-            // The chime climbs with every seed.
             Fx.sound(server, x, y, z, SoundEvents.AMETHYST_BLOCK_CHIME, 0.9F, 0.7F + 0.15F * n);
 
             if (n == MAX_SEEDS) {
-                // Full mound: a bigger flourish.
                 Fx.sparkle(server, x, y + 0.8D, z, 30, 1.2D);
                 Fx.shockwave(server, ParticleTypes.HAPPY_VILLAGER, x, y + 0.15D, z, 2.0D);
                 Fx.sound(server, x, y, z, SoundEvents.COMPOSTER_READY, 1.0F, 1.0F);
@@ -222,7 +198,6 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
         return InteractionResult.sidedSuccess(this.level().isClientSide);
     }
 
-    // ---------------------------------------------------------------- timer
 
     @Override
     public void tick() {
@@ -234,7 +209,7 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
         if (this.readyAt < 0) {
             this.readyAt = now + this.growTicks;
         }
-        // If the block it was sitting on disappears, it pops off as an item instead of floating.
+        // block under it gone = pops off as an item
         if (this.tickCount % 10 == 0 && !hasSupport()) {
             popOff(server);
             return;
@@ -248,19 +223,14 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
         }
     }
 
-    /**
-     * Sparkles while it grows, and a tremor that builds up toward the end:
-     *  - last 30 s: a faint dirt trickle and a low rumble every 1.5 s
-     *  - last 10 s: stronger, every half second, more sparkles
-     *  - last 2 s: the ground shakes constantly, with a shockwave one second before it rises
-     */
+    // sparkles while growing + a tremor that builds up at the end:
+    // last 30s trickle + rumble, last 10s stronger, last 2s constant shaking w/ a shockwave 1s before it rises
     private void growthEffects(ServerLevel server, long remaining) {
         int seeds = getSeeds();
         double x = getX();
         double y = getY();
         double z = getZ();
 
-        // Planted seeds give off a gentle glow of sparkles. More seeds, more sparkles.
         if (seeds > 0 && this.tickCount % 20 == 0) {
             Fx.sparkle(server, x, y + 0.5D, z, 1 + seeds, 0.8D);
         }
@@ -317,7 +287,7 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
         golem.yRotO = yaw;
         golem.yBodyRot = yaw;
         golem.yHeadRot = yaw;
-        // No room to stand up (low ceiling, blocks on top)? Try again in 2 seconds.
+        // no room to stand up, try again in 2s
         if (!server.noCollision(golem)) {
             this.readyAt = server.getGameTime() + 40L;
             return;
@@ -343,11 +313,9 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
         this.discard();
     }
 
-    // ---------------------------------------------------------------- GeckoLib (no animations)
 
     @Override
     public void registerControllers(AnimatableManager.ControllerRegistrar controllers) {
-        // The mound is a still model.
     }
 
     @Override

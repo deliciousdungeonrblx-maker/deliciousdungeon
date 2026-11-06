@@ -4,23 +4,17 @@ import java.util.EnumSet;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.goal.Goal;
 
-/**
- * Chase the target and sting it. The attack animation is 0.5 s long and the stinger bottoms out at
- * 0.25 s, so the damage and the venom land 5 ticks after the animation starts.
- */
+// Chase n sting. attack anim is 0.5s and the stinger bottoms out at 0.25s so dmg + venom land 5 ticks in
 public class ScorpionStingGoal extends Goal {
-    /** The scorpion stands still while the 0.5 second sting animation plays. */
     private static final int SWING_TICKS = 10;
-    /** Ticks until the stinger lands (0.25 s into the animation). */
     private static final int HIT_DELAY = 5;
-    /** Ticks between the start of one sting and the start of the next (2 s). */
     private static final int ATTACK_COOLDOWN = 40;
 
     private final HugeScorpionEntity scorpion;
     private final double speed;
 
-    private int swing = 0;      // ticks left of standing still during the sting
-    private int hitIn = -1;     // ticks until the stinger lands, -1 = nothing pending
+    private int swing = 0;
+    private int hitIn = -1;  // -1 = nothing pending
     private int cooldown = 0;
     private int repath = 0;
 
@@ -73,7 +67,6 @@ public class ScorpionStingGoal extends Goal {
             cooldown--;
         }
 
-        // The stinger lands: damage and venom, if the target is still within reach.
         if (hitIn >= 0) {
             if (hitIn == 0) {
                 if (target.isAlive() && scorpion.inStingRange(target, 0.6D)) {
@@ -85,20 +78,17 @@ public class ScorpionStingGoal extends Goal {
             }
         }
 
-        // Mid-sting: stand still until the animation is over.
         if (swing > 0) {
             swing--;
             scorpion.getNavigation().stop();
             return;
         }
 
-        // Chase.
         if (--repath <= 0) {
             repath = 4 + scorpion.getRandom().nextInt(7);
             scorpion.getNavigation().moveTo(target, speed);
         }
 
-        // Start a sting.
         if (cooldown <= 0
                 && scorpion.inStingRange(target, 0.0D)
                 && scorpion.getSensing().hasLineOfSight(target)) {

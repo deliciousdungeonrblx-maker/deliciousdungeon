@@ -11,7 +11,7 @@ public class ModEffects {
     public static final DeferredRegister<MobEffect> MOB_EFFECTS =
             DeferredRegister.create(Registries.MOB_EFFECT, Meshi.MODID);
 
-    /** Test it with: /effect give @s meshi:scorpion_venom 20 0 */
+    // test: /effect give @s meshi:scorpion_venom 20 0
     public static final DeferredHolder<MobEffect, ScorpionVenomEffect> SCORPION_VENOM =
             MOB_EFFECTS.register("scorpion_venom", ScorpionVenomEffect::new);
 }

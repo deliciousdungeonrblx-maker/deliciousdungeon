@@ -19,7 +19,6 @@ public class EarthGolemModel extends GeoModel<EarthGolemEntity> {
     private static final ResourceLocation TEXTURE_CROPS =
             ResourceLocation.fromNamespaceAndPath(Meshi.MODID, "textures/entity/earth_golem_crops.png");
 
-    /** Head turn limits, in degrees. */
     private static final float MAX_HEAD_YAW = 45.0F;
     private static final float MAX_HEAD_PITCH = 30.0F;
 
@@ -38,7 +37,6 @@ public class EarthGolemModel extends GeoModel<EarthGolemEntity> {
         return ANIMATION;
     }
 
-    /** Turns the "head" bone toward whatever the golem is looking at, on top of the animation. */
     @Override
     public void setCustomAnimations(EarthGolemEntity golem, long instanceId, AnimationState<EarthGolemEntity> state) {
         super.setCustomAnimations(golem, instanceId, state);

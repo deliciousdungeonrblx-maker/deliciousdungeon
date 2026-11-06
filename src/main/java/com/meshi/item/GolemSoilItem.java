@@ -27,16 +27,12 @@ import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
-/**
- * What you hold after picking up a mound. It remembers how many seeds were planted and which crop,
- * and right-clicking the top of a block puts the mound back down (and restarts its one-day timer).
- */
+// what u hold aftr picking up a mound. remembers the planted crops, right click the top of a block to put it back (timer restarts)
 public class GolemSoilItem extends Item {
     public GolemSoilItem(Properties properties) {
         super(properties);
     }
 
-    /** A Golem Soil item that remembers every seed planted, in any mix of crops. */
     public static ItemStack create(List<GolemCrop> crops, long growTicks) {
         ItemStack stack = new ItemStack(ModItems.GOLEM_SOIL.get());
         boolean customTime = growTicks != SoilMoundEntity.GROW_TICKS;
@@ -54,7 +50,6 @@ public class GolemSoilItem extends Item {
         return stack;
     }
 
-    /** The grow time stored on the item (one day if it has no custom time). */
     public static long growTicksOf(ItemStack stack) {
         CompoundTag tag = dataOf(stack);
         long ticks = tag.contains("GrowTicks") ? tag.getLong("GrowTicks") : SoilMoundEntity.GROW_TICKS;
@@ -65,7 +60,6 @@ public class GolemSoilItem extends Item {
         return stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag();
     }
 
-    /** The planted crops stored on the item, one entry per seed (old one-crop items still read fine). */
     public static List<GolemCrop> cropsOf(ItemStack stack) {
         return GolemCrop.readList(dataOf(stack), SoilMoundEntity.MAX_SEEDS);
     }
@@ -73,7 +67,6 @@ public class GolemSoilItem extends Item {
     @Override
     public InteractionResult useOn(UseOnContext context) {
         Level level = context.getLevel();
-        // Only on top of a block, with room for the mound.
         if (context.getClickedFace() != Direction.UP) {
             return InteractionResult.FAIL;
         }
@@ -122,7 +115,6 @@ public class GolemSoilItem extends Item {
     public void appendHoverText(ItemStack stack, Item.TooltipContext context, List<Component> tooltip, TooltipFlag flag) {
         List<GolemCrop> crops = cropsOf(stack);
         if (!crops.isEmpty()) {
-            // "Cabbage x2, Tomato x1" in the order they were first planted.
             Map<GolemCrop, Integer> counts = new LinkedHashMap<>();
             for (GolemCrop crop : crops) {
                 counts.merge(crop, 1, Integer::sum);

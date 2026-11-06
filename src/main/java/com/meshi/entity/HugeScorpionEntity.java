@@ -33,6 +33,10 @@ import net.minecraft.world.entity.ai.goal.RandomLookAroundGoal;
 import net.minecraft.world.entity.ai.goal.WaterAvoidingRandomStrollGoal;
 import net.minecraft.world.entity.ai.goal.target.HurtByTargetGoal;
 import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
+import net.minecraft.world.entity.animal.Animal;
+import net.minecraft.world.entity.animal.Cow;
+import net.minecraft.world.entity.animal.Pig;
+import net.minecraft.world.entity.animal.Sheep;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.monster.Monster;
@@ -50,64 +54,54 @@ import software.bernie.geckolib.animation.PlayState;
 import software.bernie.geckolib.animation.RawAnimation;
 import software.bernie.geckolib.util.GeckoLibUtil;
 
-/**
- * The huge scorpion: a fast, hostile ambusher. Its sting hurts a little, but the venom is the real
- * danger: a stung creature is drained down to 1 HP (Scorpion Venom never kills by itself) and is
- * left Weak and Slow while it lasts. Milk cures all three.
- *
- * It usually comes out of a Scorpion Burrow (a hole on the side of a wall, see ScorpionBurrowBlock).
- * While it climbs out ("emerge", 0.5 s) it is invulnerable, has no collision and walks out of the wall
- * on its own, so the model and the hitbox stay together. The emerge animation's own forward slide is
- * ignored on purpose (see HugeScorpionModel), the entity does the moving.
- *
- * It also fights other hostile mobs that come near, and it likes to move around between burrows: now
- * and then (after a sting, when it is badly hurt, or just at random while idle) it runs to a burrow
- * nearby, dives into the wall, waits a few seconds out of sight, and climbs out of a different burrow.
- *
- * It drops Raw Scorpion Meat (see data/meshi/loot_table/entities/huge_scorpion.json).
- *
- * Test it with:  /summon meshi:huge_scorpion ~ ~ ~
- * Or in the wall (the open side is the way it faces):  /give @s meshi:scorpion_burrow
- */
+// huge scorpion, fast hostile ambusher. sting is weak but the venom drains u to 1 HP + weak + slow (milk cures it)
+// comes out of a ScorpionBurrowBlock. while emerging (0.5s) its invulnerable, no collision n walks out on its own so the hitbox stays w/ the model (anim slide ignored, see HugeScorpionModel)
+// lives near its burrow: stays hidden inside it til a player / hostile mob / cow, sheep or pig comes near, then pops out to attack
+// never chases or wanders further than LEASH_RADIUS from its home burrow. no target for a while = runs back home n hides again
+// hurt badly / grabbed food = runs for a burrow n hides. hit n run after a sting hops to a different burrow for a few secs
+// drops raw scorpion meat (loot_table/entities/huge_scorpion.json)
+// test: /summon meshi:huge_scorpion ~ ~ ~   or   /give @s meshi:scorpion_burrow
 public class HugeScorpionEntity extends Monster implements GeoEntity {
-    // ---- Venom: tweak these --------------------------------------------------------------------
-    /** How long the venom lasts, in ticks (20 ticks = 1 second). */
+    // ---- venom, tweak these
     public static final int VENOM_TICKS = 20 * 8;
-    /** Weakness level minus one: 0 = Weakness I, 1 = Weakness II. */
+    // 0 = weakness I, 1 = weakness II
     private static final int WEAKNESS_AMPLIFIER = 0;
-    /** Slowness level minus one: 0 = Slowness I, 1 = Slowness II. */
+    // same for slowness
     private static final int SLOWNESS_AMPLIFIER = 0;
 
-    // ---- Size and emerging -----------------------------------------------------------------------
-    /** The Blockbench model is drawn this many times bigger. Used by HugeScorpionRenderer. */
+    // ---- size n emerging
+    // model is drawn this many x bigger (renderer uses it)
     public static final float MODEL_SCALE = 2.0F;
-    /** Length of the "emerge" animation (0.5 s). */
     public static final int EMERGE_DURATION = 10;
-    /** Blocks behind the wall face where the scorpion's origin starts (hides its claws inside the wall). */
+    // blocks behind teh wall face where its origin starts (claws hidden in the wall)
     public static final double EMERGE_START_INSIDE = 1.7D;
-    /** Blocks in front of the wall face where its origin ends up (so its hitbox is clear of the wall). */
+    // Blocks infront of the wall where its origin ends up
     public static final double EMERGE_END_OUTSIDE = 1.25D;
 
-    // ---- Fighting other monsters and hopping between burrows: tweak these ------------------------
-    /** It attacks other hostile mobs (not its own kind) closer than this many blocks. */
+    // ---- fighting n hopping, tweak these
+    // attacks other hostile mobs closer than this
     private static final double HOSTILE_RANGE = 12.0D;
-    /** How far it looks for a burrow to run to. */
     public static final double HOP_RANGE = 14.0D;
-    /** How far from that burrow it may come out again. */
     public static final double HOP_DEST_RANGE = 24.0D;
-    /** Ticks it will not hop again after coming out of a burrow (8 s). */
+    // no hopping for this long after coming out of a burrow (8s)
     private static final int HOP_COOLDOWN = 20 * 8;
-    /** Chance to hop away after landing a sting (hit and run). */
     private static final float HOP_CHANCE_AFTER_STING = 0.4F;
-    /** It always runs for a burrow when its health drops below this share of its maximum. */
+    // always runs for a burrow below this share of max hp
     private static final float HOP_FLEE_HEALTH = 0.4F;
-    /** While idle it hops about once per this many seconds on average. */
-    private static final int HOP_IDLE_ODDS = 45;
-    /** Blocks per tick while it dives into the wall. */
     private static final double DIVE_SPEED = 0.28D;
     private static final int HOP_STATE_NONE = 0;
     private static final int HOP_STATE_DIVING = 2;
     private static final int HOP_STATE_HIDDEN = 3;
+
+    // ---- staying near the burrows, tweak these
+    // wont chase or grab food further than this from its home burrow
+    public static final double LEASH_RADIUS = 14.0D;
+    // no target this long = goes back home n hides (6s)
+    private static final int IDLE_RETURN_TICKS = 20 * 6;
+    // hidden one pops out when prey gets this close to its burrow
+    private static final double LURK_TRIGGER_RANGE = 6.0D;
+    // wont pop out for prey til its healed up to this share of max hp
+    private static final float LURK_WAKE_HEALTH = 0.7F;
 
     private static final EntityDataAccessor<Integer> EMERGE_TICKS =
             SynchedEntityData.defineId(HugeScorpionEntity.class, EntityDataSerializers.INT);
@@ -119,24 +113,26 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
 
     private final AnimatableInstanceCache cache = GeckoLibUtil.createInstanceCache(this);
 
-    /** Where the wall face is (the middle of the hole). Server side only, used for the dust. */
     private Vec3 emergePlane = null;
-    /** Chips of the wall block it is coming out of. Server side only. */
     private ParticleOptions emergeChips = null;
 
-    // Hopping between burrows (server side only).
     private boolean hopRequested = false;
     private int hopCooldown = 0;
     private int hopState = HOP_STATE_NONE;
     private int hopTimer = 0;
     private int hopRetries = 0;
-    /** The burrow it dives into, and the one it will come out of (null = same one). */
     private BlockPos hopBurrow = null;
     private BlockPos hopDest = null;
-    /** True from the moment it decides to run for a burrow until it is out of the next one: nothing can distract it. */
+    // From deciding to run til its out of the next burrow, nothing can distract it
     private boolean fleeing = false;
-    /** No burrow was in reach: do not look again before this tick. */
     private int noBurrowUntil = 0;
+    // burrow it last came out of, its "home"
+    private BlockPos home = null;
+    private int idleTicks = 0;
+    // heading for a burrow to hide in (set by requestRetreat / forceHop), becomes lurking once it dives
+    private boolean retreating = false;
+    // hidden in its burrow til prey comes near
+    private boolean lurking = false;
 
     public HugeScorpionEntity(EntityType<? extends HugeScorpionEntity> type, Level level) {
         super(type, level);
@@ -145,17 +141,17 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
 
     public static AttributeSupplier.Builder createAttributes() {
         return Monster.createMonsterAttributes()
-                .add(Attributes.MAX_HEALTH, 16.0D)           // 8 hearts (a zombie has 10)
-                .add(Attributes.MOVEMENT_SPEED, 0.27D)       // a little quicker than a zombie (0.23)
-                .add(Attributes.ATTACK_DAMAGE, 2.0D)         // 1 heart
-                .add(Attributes.ARMOR, 2.0D)                 // light shell
+                .add(Attributes.MAX_HEALTH, 16.0D)  // 8 hearts
+                .add(Attributes.MOVEMENT_SPEED, 0.27D)  // zombie is 0.23
+                .add(Attributes.ATTACK_DAMAGE, 2.0D)
+                .add(Attributes.ARMOR, 2.0D)
                 .add(Attributes.KNOCKBACK_RESISTANCE, 0.3D)
                 .add(Attributes.FOLLOW_RANGE, 24.0D);
     }
 
     @Override
     protected void registerGoals() {
-        // While it climbs out of the wall it does nothing else: this goal holds every movement flag.
+        // while climbing out it does nothing else
         this.goalSelector.addGoal(0, new Goal() {
             {
                 this.setFlags(EnumSet.of(Flag.MOVE, Flag.LOOK, Flag.JUMP));
@@ -175,21 +171,33 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
         this.goalSelector.addGoal(1, new ScorpionHopGoal(this));
         this.goalSelector.addGoal(2, new ScorpionStingGoal(this, 1.1D));
         this.goalSelector.addGoal(2, new ScorpionScavengeGoal(this));
-        this.goalSelector.addGoal(3, new WaterAvoidingRandomStrollGoal(this, 0.7D));
+        // only wanders freely if it has no burrow to live at
+        this.goalSelector.addGoal(3, new WaterAvoidingRandomStrollGoal(this, 0.7D) {
+            @Override
+            public boolean canUse() {
+                return HugeScorpionEntity.this.getHome() == null && super.canUse();
+            }
+        });
         this.goalSelector.addGoal(4, new LookAtPlayerGoal(this, Player.class, 8.0F));
         this.goalSelector.addGoal(5, new RandomLookAroundGoal(this));
 
         this.targetSelector.addGoal(1, new HurtByTargetGoal(this));
-        this.targetSelector.addGoal(2, new NearestAttackableTargetGoal<>(this, Player.class, true));
-        // Other hostile mobs that wander close (zombies, skeletons, ...) are fair game too, but players come first.
+        this.targetSelector.addGoal(2, new NearestAttackableTargetGoal<>(this, Player.class, 10, true, false,
+                target -> isWithinLeash(target)));
+        // other hostile mobs are fair game too but players come first
         this.targetSelector.addGoal(3, new NearestAttackableTargetGoal<>(this, Mob.class, 10, true, false,
                 target -> target instanceof Enemy
                         && !(target instanceof HugeScorpionEntity)
-                        && !(target instanceof WalkingMushroomEntity) // they only bounce off it anyway
+                        && !(target instanceof WalkingMushroomEntity)  // they only bounce off anyway
+                        && isWithinLeash(target)
                         && target.distanceToSqr(this) <= HOSTILE_RANGE * HOSTILE_RANGE));
+        // food animals too
+        this.targetSelector.addGoal(4, new NearestAttackableTargetGoal<>(this, Animal.class, 10, true, false,
+                target -> (target instanceof Cow || target instanceof Sheep || target instanceof Pig)
+                        && isWithinLeash(target)));
     }
 
-    // ---------------------------------------------------------------- emerging from a wall
+    // ---- emerging
 
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
@@ -209,24 +217,19 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
         return getEmergeTicks() > 0;
     }
 
-    /**
-     * Call this right after placing the scorpion inside the wall, facing out of it (the burrow block
-     * does). "plane" is the middle of the hole on the wall face, "chips" the particle for the wall block.
-     */
+    // call right after placing it in the wall facing out. plane = middle of the hole, chips = wall particle
     public void startEmerging(Vec3 plane, ParticleOptions chips) {
         this.emergePlane = plane;
         this.emergeChips = chips;
         setEmergeTicks(EMERGE_DURATION);
         beginUndergroundState();
         if (this.level() instanceof ServerLevel server) {
-            // A low rumble and a crack as the stone gives way.
             Fx.sound(server, plane.x, plane.y, plane.z, SoundEvents.DEEPSLATE_BREAK, 1.4F, 0.5F);
             Fx.sound(server, plane.x, plane.y, plane.z, SoundEvents.GRAVEL_BREAK, 1.2F, 0.6F);
             Fx.sound(server, plane.x, plane.y, plane.z, SoundEvents.SPIDER_AMBIENT, 1.0F, 0.5F);
         }
     }
 
-    /** No collision, no gravity and nothing can hurt it while it is inside the wall. */
     private void beginUndergroundState() {
         this.noPhysics = true;
         this.setNoGravity(true);
@@ -242,7 +245,6 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
             Vec3 forward = Vec3.directionFromRotation(0.0F, this.getYRot());
             double x = this.emergePlane.x + forward.x * 0.5D;
             double z = this.emergePlane.z + forward.z * 0.5D;
-            // The last shove: a burst of rubble, a shockwave along the floor and a hiss.
             server.sendParticles(chips, x, this.emergePlane.y + 0.5D, z, 50, 0.8D, 0.5D, 0.8D, 0.12D);
             Fx.shockwave(server, chips, x, this.emergePlane.y + 0.1D, z, 2.0D);
             Fx.dust(server, x, this.emergePlane.y + 0.4D, z, 12, 0.8D);
@@ -260,7 +262,7 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
         if (!this.level().isClientSide && isEmerging()) {
             this.getNavigation().stop();
             this.setDeltaMovement(Vec3.ZERO);
-            // Walk straight out of the wall: the whole trip is split evenly over the animation.
+            // walks straight out, trip split evenly over the anim
             Vec3 step = Vec3.directionFromRotation(0.0F, this.getYRot())
                     .scale((EMERGE_START_INSIDE + EMERGE_END_OUTSIDE) / EMERGE_DURATION);
             this.setPos(getX() + step.x, getY(), getZ() + step.z);
@@ -283,51 +285,153 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
             }
             if (this.hopState != HOP_STATE_NONE) {
                 tickHop(server);
-            } else if (getTarget() == null && this.tickCount % 20 == 0 && this.random.nextInt(HOP_IDLE_ODDS) == 0) {
-                requestHop(); // nothing to do: wander off to another burrow
+            } else {
+                tickHome(server);
             }
         }
     }
 
-    // ---------------------------------------------------------------- hopping between burrows
+    // ---- staying near home
 
-    /** Wants to run to a burrow, dive in and come out of another one. Does nothing during the cooldown. */
+    public BlockPos getHome() {
+        return this.home;
+    }
+
+    public void setHome(BlockPos pos) {
+        this.home = pos;
+    }
+
+    public boolean isRetreating() {
+        return this.retreating;
+    }
+
+    // the burrow its hiding in right now, null if its not hidden
+    public BlockPos getHiddenBurrow() {
+        return isHidden() ? this.hopBurrow : null;
+    }
+
+    // targets n food further than LEASH_RADIUS from home are ignored
+    public boolean isWithinLeash(Entity entity) {
+        return this.home == null
+                || entity.distanceToSqr(this.home.getX() + 0.5D, this.home.getY() + 0.5D, this.home.getZ() + 0.5D)
+                <= LEASH_RADIUS * LEASH_RADIUS;
+    }
+
+    // goals call this while theyre busy so it doesnt run home mid task
+    public void noteBusy() {
+        this.idleTicks = 0;
+    }
+
+    private void tickHome(ServerLevel server) {
+        if (isEmerging()) {
+            this.idleTicks = 0;
+            return;
+        }
+        if (this.tickCount % 60 == 0) {
+            refreshHome(server);
+        }
+        LivingEntity target = getTarget();
+        if (target != null && !isWithinLeash(target)) {
+            setTarget(null);  // too far from home, let it go
+        }
+        if (this.home != null && getTarget() == null && !this.fleeing && !this.hopRequested) {
+            if (++this.idleTicks >= IDLE_RETURN_TICKS) {
+                this.idleTicks = 0;
+                requestRetreat();
+            }
+        } else {
+            this.idleTicks = 0;
+        }
+    }
+
+    // home burrow got broken (or it was summoned w/o one): adopt the nearest burrow, if theres any
+    private void refreshHome(ServerLevel server) {
+        if (this.home != null && server.getBlockState(this.home).getBlock() instanceof ScorpionBurrowBlock) {
+            return;
+        }
+        BlockPos here = this.blockPosition();
+        BlockPos best = null;
+        double bestDist = Double.MAX_VALUE;
+        for (BlockPos pos : ScorpionBurrowBlock.findBurrows(server, here, 16.0D, 6)) {
+            double d = pos.distSqr(here);
+            if (d < bestDist) {
+                bestDist = d;
+                best = pos;
+            }
+        }
+        this.home = best;
+    }
+
+    // go back to the home burrow n hide in it til prey shows up. ignores the hop cooldown
+    private void requestRetreat() {
+        if (this.hopState == HOP_STATE_NONE && !isEmerging() && this.tickCount >= this.noBurrowUntil) {
+            this.hopRequested = true;
+            this.retreating = true;
+            this.hopCooldown = 0;
+        }
+    }
+
+    // hidden n waiting. pops out when prey (or dropped food) gets near the burrow
+    private void tickLurk(ServerLevel server) {
+        if (this.hopBurrow == null) {
+            this.hopBurrow = this.home;
+        }
+        if (this.hopBurrow == null || !(server.getBlockState(this.hopBurrow).getBlock() instanceof ScorpionBurrowBlock)) {
+            // burrow broke while it was hiding: try another one
+            this.hopDest = this.hopBurrow == null ? null : ScorpionBurrowBlock.pickOtherBurrow(server, this.hopBurrow, HOP_DEST_RANGE, this.random);
+            this.lurking = false;
+            this.hopTimer = 10;
+            return;
+        }
+        if (this.tickCount % 20 == 0 && getHealth() < getMaxHealth()) {
+            this.heal(1.0F);
+        }
+        if (this.tickCount % 10 != 0) {
+            return;
+        }
+        boolean healthy = getHealth() >= getMaxHealth() * LURK_WAKE_HEALTH;
+        if ((healthy && ScorpionBurrowBlock.preyNear(server, this.hopBurrow, LURK_TRIGGER_RANGE))
+                || ScorpionBurrowBlock.foodNearby(server, this.hopBurrow, 9.0D)) {
+            this.lurking = false;
+            this.hopDest = null;
+            this.hopTimer = 5;
+        }
+    }
+
+    // ---- hopping
+
     public void requestHop() {
         if (this.hopState == HOP_STATE_NONE && !isEmerging() && this.hopCooldown <= 0) {
             this.hopRequested = true;
         }
     }
 
-    /** Is it ready to go looking for a burrow right now? (Used by ScorpionHopGoal.) */
     public boolean isHopRequested() {
         return this.hopRequested && this.hopCooldown <= 0 && this.hopState == HOP_STATE_NONE && !isEmerging();
     }
 
-    /** Forget the wish to hop, and wait a while before wanting it again. */
     public void clearHopRequest(int cooldownTicks) {
         this.hopRequested = false;
+        this.retreating = false;
         this.fleeing = false;
         this.hopCooldown = Math.max(this.hopCooldown, cooldownTicks);
     }
 
-    /**
-     * Run for a burrow NOW, whatever the cooldown (badly hurt, or it just grabbed food). It will not be
-     * talked out of it: see isFleeing().
-     */
+    // run for a burrow NOW, ignores cooldown (badly hurt or grabbed food). cant be talked out of it, see isFleeing()
     public void forceHop() {
         if (this.hopState == HOP_STATE_NONE && !isEmerging() && this.tickCount >= this.noBurrowUntil) {
             this.hopRequested = true;
+            this.retreating = true;
             this.hopCooldown = 0;
             setFleeing(true);
         }
     }
 
-    /** The goal could not find a burrow to run to: do not look again for 3 seconds. */
     public void noteNoBurrow() {
         this.noBurrowUntil = this.tickCount + 60;
     }
 
-    /** While true it ignores everything except getting into a burrow: no stinging, no new targets. */
+    // while true it ignores everything but getting into a burrow, no sting n no new targets
     public boolean isFleeing() {
         return this.fleeing;
     }
@@ -339,7 +443,6 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
         }
     }
 
-    /** Nobody can talk a fleeing scorpion into a new target (a hit, or a player walking past). */
     @Override
     public void setTarget(LivingEntity target) {
         if (this.fleeing && target != null) {
@@ -348,22 +451,20 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
         super.setTarget(target);
     }
 
-    // ---- food ---------------------------------------------------------------------------------------
 
-    /** Grabs a dropped food item (the whole stack) and sprints for a burrow. It drops it again if killed on the way. */
+    // grabs a dropped food stack n sprints for a burrwo, drops it again if killed on the way
     public void stealFood(ItemEntity item) {
         if (!this.getMainHandItem().isEmpty() || !item.isAlive()) {
             return;
         }
         this.setItemSlot(EquipmentSlot.MAINHAND, item.getItem().copy());
-        this.setDropChance(EquipmentSlot.MAINHAND, 2.0F); // above 1.0 = always drops, whoever kills it
+        this.setDropChance(EquipmentSlot.MAINHAND, 2.0F);  // above 1.0 = always drops
         item.discard();
         this.playSound(SoundEvents.ITEM_PICKUP, 0.8F, 0.8F);
         this.playSound(SoundEvents.SPIDER_AMBIENT, 1.0F, 0.6F);
         forceHop();
     }
 
-    /** Eats whatever it is carrying (safe in its burrow) and heals a little. */
     public void eatCarried() {
         ItemStack carried = this.getMainHandItem();
         if (!carried.isEmpty()) {
@@ -373,21 +474,22 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
         }
     }
 
-    /** True while it is diving into a wall or waiting out of sight inside it. */
     public boolean isHidden() {
         return this.hopState != HOP_STATE_NONE;
     }
 
-    /** It reached the burrow: dive in. It will come out of another burrow nearby if there is one. */
     public void beginDive(BlockPos burrow) {
         if (!(this.level() instanceof ServerLevel server)) {
             return;
         }
         this.hopRequested = false;
         this.hopBurrow = burrow;
-        this.hopDest = ScorpionBurrowBlock.pickOtherBurrow(server, burrow, HOP_DEST_RANGE, this.random);
+        // retreating = hides here n waits for prey, hit n run = comes out of another burrow after a few secs
+        this.lurking = this.retreating;
+        this.retreating = false;
+        this.hopDest = this.lurking ? null : ScorpionBurrowBlock.pickOtherBurrow(server, burrow, HOP_DEST_RANGE, this.random);
         this.hopState = HOP_STATE_DIVING;
-        this.hopTimer = 45; // safety net, it normally takes about 12 to 20 ticks
+        this.hopTimer = 45;  // safety net
         this.hopRetries = 0;
         setTarget(null);
         this.getNavigation().stop();
@@ -399,14 +501,14 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
 
     private void tickHop(ServerLevel server) {
         if (this.hopBurrow == null && this.hopDest == null) {
-            this.discard(); // saved while hiding but no burrow was remembered
+            this.discard();  // no burrow remembered
             return;
         }
         this.setDeltaMovement(Vec3.ZERO);
 
         if (this.hopState == HOP_STATE_DIVING) {
             if (!(server.getBlockState(this.hopBurrow).getBlock() instanceof ScorpionBurrowBlock)) {
-                this.discard(); // the burrow was broken while it was diving into it
+                this.discard();  // burrow broke mid dive
                 return;
             }
             Direction dir = ScorpionBurrowBlock.facingOf(server, this.hopBurrow, Direction.NORTH);
@@ -414,13 +516,12 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
             double insideX = plane.x - dir.getStepX() * EMERGE_START_INSIDE;
             double insideZ = plane.z - dir.getStepZ() * EMERGE_START_INSIDE;
 
-            // Turn to face the wall, then scuttle straight into it.
             float yaw = Mth.approachDegrees(this.getYRot(), dir.getOpposite().toYRot(), 40.0F);
             this.setYRot(yaw);
             this.setYBodyRot(yaw);
             this.setYHeadRot(yaw);
 
-            // If it arrived at an angle, first scuttle sideways until it is right in front of the hole.
+            // arrived at an angle: scuttle sideways til its infront of the hole
             double rx = getX() - plane.x;
             double rz = getZ() - plane.z;
             double along = rx * dir.getStepX() + rz * dir.getStepZ();
@@ -441,19 +542,22 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
                 }
                 this.hopTimer--;
             } else {
-                // Gone: out of sight, silent, and waiting in the wall for a few seconds.
                 this.setPos(insideX, getY(), insideZ);
                 this.setInvisible(true);
                 this.setSilent(true);
                 eatCarried();
-                this.heal(3.0F); // a rest in the burrow
+                this.heal(3.0F);  // rest in the burrow
                 this.hopState = HOP_STATE_HIDDEN;
                 this.hopTimer = 60 + this.random.nextInt(80);
                 Fx.dust(server, plane.x, plane.y + 0.3D, plane.z, 10, 0.6D);
                 Fx.sound(server, plane.x, plane.y, plane.z, SoundEvents.DEEPSLATE_BREAK, 1.0F, 0.6F);
             }
         } else if (this.hopState == HOP_STATE_HIDDEN) {
-            // Food dropped near the burrow it is hiding in: out it comes, right there.
+            if (this.lurking) {
+                tickLurk(server);
+                return;
+            }
+            // food dropped near teh burrow its hiding in: comes out right there
             if (this.hopTimer > 10 && this.tickCount % 10 == 0 && this.hopBurrow != null
                     && ScorpionBurrowBlock.foodNearby(server, this.hopBurrow, 9.0D)) {
                 this.hopDest = null;
@@ -465,7 +569,6 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
         }
     }
 
-    /** Comes out of the other burrow (or the one it went into if there is no other, or no room). */
     private void reappear(ServerLevel server) {
         BlockPos[] options = {this.hopDest, this.hopBurrow};
         boolean force = this.hopRetries > 6;
@@ -482,11 +585,11 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
             }
         }
         if (force) {
-            this.discard(); // both burrows are gone
+            this.discard();  // both burrows gone
             return;
         }
         this.hopRetries++;
-        this.hopTimer = 40; // no room in front of the burrows right now, try again in 2 seconds
+        this.hopTimer = 40;  // no room, try again in 2s
     }
 
     @Override
@@ -497,6 +600,8 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
         tag.putInt("HopTimer", this.hopTimer);
         putPos(tag, "HopBurrow", this.hopBurrow);
         putPos(tag, "HopDest", this.hopDest);
+        putPos(tag, "Home", this.home);
+        tag.putBoolean("Lurking", this.lurking);
     }
 
     @Override
@@ -508,8 +613,10 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
         }
         this.hopBurrow = getPos(tag, "HopBurrow");
         this.hopDest = getPos(tag, "HopDest");
+        this.home = getPos(tag, "Home");
+        this.lurking = tag.getBoolean("Lurking");
         if (tag.getInt("HopState") >= HOP_STATE_DIVING) {
-            // Saved while diving or hiding: pick up as hidden, and come out soon.
+            // saved while diving/hiding: comes back hidden n pops out soon
             this.hopState = HOP_STATE_HIDDEN;
             this.hopTimer = Math.min(Math.max(tag.getInt("HopTimer"), 20), 60);
             beginUndergroundState();
@@ -518,52 +625,43 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
         }
     }
 
-    // ---------------------------------------------------------------- combat
+    // ---- combat
 
-    /**
-     * Is the target close enough to sting? The scorpion is wide, so this looks at the gap between
-     * the two hitboxes instead of the distance between their centres. "slack" widens the check a
-     * little for the moment the sting lands (the target may have moved since the swing began).
-     */
+    // Close enough to sting? checks the gap between the hitboxes (scorpion is wide), slack widens it for when the sting lands
     public boolean inStingRange(LivingEntity target, double slack) {
         return this.getBoundingBox().inflate(0.9D + slack, 0.4D, 0.9D + slack).intersects(target.getBoundingBox());
     }
 
-    /** The sting: normal melee damage, then the venom. */
     @Override
     public boolean doHurtTarget(Entity target) {
         boolean hit = super.doHurtTarget(target);
         if (hit && target instanceof LivingEntity living) {
-            // Scorpion Venom drains to 1 HP, and the sting also leaves them weak and slow.
             living.addEffect(new MobEffectInstance(ModEffects.SCORPION_VENOM, VENOM_TICKS, 0), this);
             living.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, VENOM_TICKS, WEAKNESS_AMPLIFIER), this);
             living.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, VENOM_TICKS, SLOWNESS_AMPLIFIER), this);
             stingEffects(living);
             if (this.random.nextFloat() < HOP_CHANCE_AFTER_STING) {
-                requestHop(); // hit and run
+                requestHop();  // hit and run
             }
         }
         return hit;
     }
 
-    /** Badly hurt: run for a burrow. */
     @Override
     public boolean hurt(DamageSource source, float amount) {
         boolean hurt = super.hurt(source, amount);
         if (hurt && !this.level().isClientSide && this.getHealth() < this.getMaxHealth() * HOP_FLEE_HEALTH) {
-            forceHop(); // guaranteed: no cooldown, nothing distracts it on the way
+            forceHop();  // guaranteed, no cooldown
         }
         return hurt;
     }
 
-    /** Called when the sting starts: a hiss as the tail snaps back. */
     public void attackStartEffects() {
         if (this.level() instanceof ServerLevel server) {
             Fx.sound(server, getX(), getY() + 0.5D, getZ(), SoundEvents.SPIDER_HURT, 1.0F, 0.6F);
         }
     }
 
-    /** Called when the stinger lands: green venom splashes out of the wound. */
     private void stingEffects(LivingEntity victim) {
         if (this.level() instanceof ServerLevel server) {
             Fx.venom(server, victim.getX(), victim.getY() + victim.getBbHeight() * 0.6D, victim.getZ(), 22, 0.35D);
@@ -572,7 +670,6 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
         }
     }
 
-    /** A drip of venom now and then while it is angry (client side, only the people looking see it). */
     @Override
     public void aiStep() {
         super.aiStep();
@@ -586,7 +683,7 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
         }
     }
 
-    // ---------------------------------------------------------------- sounds
+    // ---- sounds
 
     @Override
     protected SoundEvent getAmbientSound() {
@@ -619,15 +716,14 @@ public class HugeScorpionEntity extends Monster implements GeoEntity {
         return a.length == 3 ? new BlockPos(a[0], a[1], a[2]) : null;
     }
 
-    // ---------------------------------------------------------------- animation
+    // ---- animation
 
     @Override
     public void registerControllers(AnimatableManager.ControllerRegistrar controllers) {
-        // Body: walk / idle (the legs scuttle while it climbs out of the wall).
         controllers.add(new AnimationController<>(this, "main", 5, this::mainPredicate));
-        // Emerge: its own controller with no blending, so it ends cleanly. Only plays while emerging.
+        // emerge: own controller, no blending
         controllers.add(new AnimationController<>(this, "emerge", 0, this::emergePredicate));
-        // Sting: runs on its own controller so it plays over walk/idle. Triggered by name from the sting goal.
+        // sting: own controller so it plays over walk/idle
         controllers.add(new AnimationController<>(this, "attack", 0, state -> PlayState.STOP)
                 .triggerableAnim("attack", STING));
     }

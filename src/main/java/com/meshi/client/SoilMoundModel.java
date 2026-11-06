@@ -11,7 +11,6 @@ public class SoilMoundModel extends GeoModel<SoilMoundEntity> {
     private static final ResourceLocation ANIMATION =
             ResourceLocation.fromNamespaceAndPath(Meshi.MODID, "animations/entity/soil_mound.animation.json");
 
-    /** soil_mound_0.png ... soil_mound_4.png, one per seed count. */
     private static final ResourceLocation[] TEXTURES = new ResourceLocation[SoilMoundEntity.MAX_SEEDS + 1];
 
     static {

@@ -7,7 +7,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 
-/** A bowl of hotpot. Eating it gives the food and effects, and always hands the empty bowl back. */
+// Bowl of hotpot, always hands the bowl back
 public class HotpotServingItem extends Item {
     public HotpotServingItem(Properties properties) {
         super(properties);
@@ -17,7 +17,6 @@ public class HotpotServingItem extends Item {
     public ItemStack finishUsingItem(ItemStack stack, Level level, LivingEntity consumer) {
         ItemStack bowl = new ItemStack(Items.BOWL);
 
-        // Vanilla eating: applies hunger and effects and shrinks the stack (not in creative).
         super.finishUsingItem(stack, level, consumer);
 
         if (stack.isEmpty()) {

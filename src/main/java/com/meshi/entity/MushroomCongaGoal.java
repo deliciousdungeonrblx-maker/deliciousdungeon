@@ -5,11 +5,7 @@ import java.util.EnumSet;
 import java.util.List;
 import net.minecraft.world.entity.ai.goal.Goal;
 
-/**
- * The conga line: an idle walking mushroom follows another idle one close by, and that one follows the next, and
- * so on. Each mushroom only follows one with a lower entity id, so there is always a leader at the front
- * (it just wanders around as usual) and never a circle. It follows for up to 30 seconds, then goes its own way.
- */
+// conga line: idle mushroom follows another idle one nearby. only follows a lower entity id so theres always a leader n never a circle. follows for up to 30s
 public class MushroomCongaGoal extends Goal {
     private static final double RANGE = 10.0D;
     private static final int MAX_TICKS = 20 * 30;

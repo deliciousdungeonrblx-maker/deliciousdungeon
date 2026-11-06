@@ -12,7 +12,6 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 public class ModBlocks {
     public static final DeferredRegister.Blocks BLOCKS = DeferredRegister.createBlocks(Meshi.MODID);
 
-    /** The hole on the side of a wall that a Huge Scorpion crawls out of. Drops nothing when broken. */
     public static final DeferredBlock<ScorpionBurrowBlock> SCORPION_BURROW =
             BLOCKS.register("scorpion_burrow", () -> new ScorpionBurrowBlock(
                     BlockBehaviour.Properties.of()
@@ -23,7 +22,6 @@ public class ModBlocks {
                             .noLootTable()
                             .pushReaction(PushReaction.DESTROY)));
 
-    /** The shared hotpot: 4 servings, right-click with a bowl. */
     public static final DeferredBlock<HotpotBlock> HOTPOT =
             BLOCKS.register("hotpot", () -> new HotpotBlock(
                     BlockBehaviour.Properties.of()

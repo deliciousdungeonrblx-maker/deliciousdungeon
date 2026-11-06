@@ -31,19 +31,14 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
-/**
- * The shared hotpot. Placed on the ground; each player right-clicks it with a bowl to take a serving.
- * It has 4 servings. When they run out an empty pot stays; right-click it to pick it up (drops a bowl).
- *
- * Works like Farmer's Delight's feast blocks (roast chicken, shepherd's pie), but has no code dependency on
- * Farmer's Delight, so the mod still builds and loads without it.
- */
+// shared hotpot, 4 servings, right click w/ a bowl. empty pot stays, click it to pick it up (drops a bowl)
+// works like FD feast blocks but has no code dependancy on it
 @SuppressWarnings("deprecation")
 public class HotpotBlock extends Block {
     public static final int MAX_SERVINGS = 4;
     public static final IntegerProperty SERVINGS = IntegerProperty.create("servings", 0, MAX_SERVINGS);
 
-    // Roughly the pot plus its two handles: x 0..16, z 1..15, up to 9/16 high.
+    // pot + handles
     private static final VoxelShape SHAPE = Block.box(0.0D, 0.0D, 1.0D, 16.0D, 9.0D, 15.0D);
 
     private final Supplier<Item> servingItem;
@@ -69,7 +64,7 @@ public class HotpotBlock extends Block {
                                            Player player, InteractionHand hand, BlockHitResult hit) {
         int servings = state.getValue(SERVINGS);
 
-        // Empty pot: any right-click clears it away (the loot table gives back a bowl).
+        // empty pot: any click clears it (loot table gives the bowl back)
         if (servings == 0) {
             if (!level.isClientSide) {
                 level.playSound(null, pos, SoundEvents.WOOD_BREAK, SoundSource.PLAYERS, 0.8F, 0.8F);
@@ -78,7 +73,6 @@ public class HotpotBlock extends Block {
             return ItemInteractionResult.SUCCESS;
         }
 
-        // Serving needs a normal bowl.
         if (!heldStack.is(Items.BOWL)) {
             if (!level.isClientSide) {
                 player.displayClientMessage(Component.translatable("message.meshi.hotpot.need_bowl"), true);
@@ -102,7 +96,6 @@ public class HotpotBlock extends Block {
             if (level instanceof ServerLevel serverLevel) {
                 serverLevel.sendParticles(new BlockParticleOption(ParticleTypes.BLOCK, state),
                         pos.getX() + 0.5, pos.getY() + 0.6, pos.getZ() + 0.5, 3, 0.1, 0.1, 0.1, 0.001D);
-                // A puff of steam rolls out when a bowl is scooped.
                 serverLevel.sendParticles(ParticleTypes.CLOUD,
                         pos.getX() + 0.5, pos.getY() + 0.55, pos.getZ() + 0.5, 8, 0.2, 0.08, 0.2, 0.02D);
             }
@@ -110,10 +103,7 @@ public class HotpotBlock extends Block {
         return ItemInteractionResult.SUCCESS;
     }
 
-    /**
-     * Bubbles popping on the broth while the pot has food in it. An empty pot is quiet.
-     * (Client side only. Called at random for blocks near the player, so each call spawns a few particles.)
-     */
+    // bubbles on the broth while theres food in it (client only)
     @Override
     public void animateTick(BlockState state, Level level, BlockPos pos, RandomSource random) {
         int servings = state.getValue(SERVINGS);
@@ -123,7 +113,6 @@ public class HotpotBlock extends Block {
         double cx = pos.getX() + 0.5D;
         double cz = pos.getZ() + 0.5D;
 
-        // Bubbles popping on the surface.
         int bubbles = random.nextInt(1 + servings);
         for (int i = 0; i < bubbles; i++) {
             level.addParticle(ParticleTypes.BUBBLE_POP,

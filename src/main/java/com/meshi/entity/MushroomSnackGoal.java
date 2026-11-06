@@ -9,11 +9,7 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.pathfinder.Path;
 
-/**
- * Dropped mushrooms, fungi and bone meal (see WalkingMushroomEntity.isSnack) are irresistible: it runs over,
- * eats one with a few crunchy bites, heals a little and does a happy hop. It even forgets about a player
- * who is chasing it, unless that player is right next to it. After a snack it is full for 30 seconds.
- */
+// dropped mushrooms / fungi / bone meal are irresistible: runs over, eats one, heals abit n hops happily. ignores a chasing player unless hes right next to it. full for 30s after
 public class MushroomSnackGoal extends Goal {
     private static final double RANGE = 10.0D;
     private static final double RUN_SPEED = 1.2D;
@@ -38,7 +34,7 @@ public class MushroomSnackGoal extends Goal {
         }
         LivingEntity target = mushroom.getTarget();
         if (target != null && target.distanceToSqr(mushroom) < 9.0D) {
-            return false; // a player right in its face comes first
+            return false;  // player in its face comes first
         }
         List<ItemEntity> items = mushroom.level().getEntitiesOfClass(ItemEntity.class,
                 mushroom.getBoundingBox().inflate(RANGE, 3.0D, RANGE),
@@ -104,7 +100,6 @@ public class MushroomSnackGoal extends Goal {
         }
     }
 
-    /** One item from the stack is gone. */
     private void finish() {
         ItemStack rest = item.getItem().copy();
         rest.shrink(1);

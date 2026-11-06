@@ -7,10 +7,7 @@ import net.minecraft.sounds.SoundEvent;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
-/**
- * The walking mushroom's sounds. The .ogg files live in assets/meshi/sounds/mushroom/ and are wired up in
- * assets/meshi/sounds.json: swap a file there (same name) to change how something sounds.
- */
+// walking mushroom sounds. the .ogg files are in assets/meshi/sounds/mushroom/, swap one (same name) to change it
 public class ModSounds {
     public static final DeferredRegister<SoundEvent> SOUND_EVENTS =
             DeferredRegister.create(Registries.SOUND_EVENT, Meshi.MODID);

@@ -4,18 +4,11 @@ import java.util.EnumSet;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.goal.Goal;
 
-/**
- * Chase the target and headbutt it. The "attack" animation is 0.83 s long and the head lands at about 0.3 s, so
- * the damage arrives 6 ticks after the animation starts. After the swing it is dizzy for a moment (a free opening).
- */
+// chase n headbutt. anim is 0.83s and the head lands at ~0.3s so dmg comes 6 ticks in. dizzy aftr the swing (free opening)
 public class MushroomBonkGoal extends Goal {
-    /** It stands still while the headbutt animation plays (0.83 s). */
     private static final int SWING_TICKS = 17;
-    /** Ticks until the head lands. */
     private static final int HIT_DELAY = 6;
-    /** Ticks between the start of one headbutt and the next (2.5 s). */
     private static final int ATTACK_COOLDOWN = 50;
-    /** Dizzy after the swing (1.2 s). */
     private static final int DIZZY_TICKS = 24;
 
     private final WalkingMushroomEntity mushroom;
@@ -77,7 +70,6 @@ public class MushroomBonkGoal extends Goal {
             cooldown--;
         }
 
-        // The head lands: damage, if the target is still within reach.
         if (hitIn >= 0) {
             if (hitIn == 0) {
                 if (target.isAlive() && mushroom.inBonkRange(target, 0.5D)) {
@@ -89,7 +81,6 @@ public class MushroomBonkGoal extends Goal {
             }
         }
 
-        // Mid-swing: stand still until the animation is over, then be dizzy for a moment.
         if (swing > 0) {
             swing--;
             mushroom.getNavigation().stop();
@@ -107,13 +98,11 @@ public class MushroomBonkGoal extends Goal {
             return;
         }
 
-        // Chase.
         if (--repath <= 0) {
             repath = 4 + mushroom.getRandom().nextInt(7);
             mushroom.getNavigation().moveTo(target, speed);
         }
 
-        // Start a headbutt.
         if (cooldown <= 0
                 && mushroom.inBonkRange(target, 0.0D)
                 && mushroom.getSensing().hasLineOfSight(target)) {

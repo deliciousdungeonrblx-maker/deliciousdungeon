@@ -9,7 +9,7 @@ public class EarthGolemRenderer extends GeoEntityRenderer<EarthGolemEntity> {
     public EarthGolemRenderer(EntityRendererProvider.Context context) {
         super(context, new EarthGolemModel());
         this.shadowRadius = 0.9F;
-        // Glowing eyes: draws <texture>_glowmask.png at full brightness over the normal texture.
+        // glowing eyes, uses <texture>_glowmask.png
         addRenderLayer(new AutoGlowingGeoLayer<>(this));
     }
 }

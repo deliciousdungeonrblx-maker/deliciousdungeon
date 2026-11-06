@@ -8,10 +8,7 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.level.pathfinder.Path;
 
-/**
- * When food is dropped nearby (and the scorpion has nothing else to do) it runs out, grabs it and sprints for
- * a burrow (see HugeScorpionEntity.stealFood). Kill it before it gets there and it drops the food again.
- */
+// food dropped nearby + nothing else to do = runs out, grabs it n sprints for a burrow (stealFood). kill it first and it drops the food
 public class ScorpionScavengeGoal extends Goal {
     private static final double RANGE = 12.0D;
     private static final double RUN_SPEED = 1.4D;
@@ -34,14 +31,15 @@ public class ScorpionScavengeGoal extends Goal {
             return false;
         }
         if (scorpion.getRandom().nextInt(10) != 0) {
-            return false; // look about twice a second, not every tick
+            return false;  // about twice a sec, not every tick
         }
         if (!(scorpion.level() instanceof net.minecraft.server.level.ServerLevel server)
                 || ScorpionBurrowBlock.findBurrows(server, scorpion.blockPosition(), HugeScorpionEntity.HOP_RANGE, 6).isEmpty()) {
-            return false; // nowhere to run back to
+            return false;  // no burrow to run to
         }
         List<ItemEntity> items = scorpion.level().getEntitiesOfClass(ItemEntity.class,
-                scorpion.getBoundingBox().inflate(RANGE, 4.0D, RANGE), ScorpionBurrowBlock::isFood);
+                scorpion.getBoundingBox().inflate(RANGE, 4.0D, RANGE),
+                e -> ScorpionBurrowBlock.isFood(e) && scorpion.isWithinLeash(e));
         items.sort(Comparator.comparingDouble(scorpion::distanceToSqr));
         for (ItemEntity candidate : items) {
             Path path = scorpion.getNavigation().createPath(candidate, 0);
@@ -77,9 +75,10 @@ public class ScorpionScavengeGoal extends Goal {
     @Override
     public void tick() {
         ticks++;
+        scorpion.noteBusy();
         scorpion.getLookControl().setLookAt(item, 30.0F, 30.0F);
         if (scorpion.getBoundingBox().inflate(0.5D, 0.3D, 0.5D).intersects(item.getBoundingBox())) {
-            scorpion.stealFood(item); // also sends it running for a burrow
+            scorpion.stealFood(item);
             return;
         }
         if (--repath <= 0) {

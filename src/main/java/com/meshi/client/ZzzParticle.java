@@ -8,7 +8,6 @@ import net.minecraft.client.particle.SpriteSet;
 import net.minecraft.client.particle.TextureSheetParticle;
 import net.minecraft.core.particles.SimpleParticleType;
 
-/** A "z" that drifts up from a sleeping walking mushroom, swaying a little, growing and fading out. */
 public class ZzzParticle extends TextureSheetParticle {
     private final double swayOffset;
 

@@ -1,6 +1,7 @@
 package com.meshi.block;
 
 import com.meshi.entity.HugeScorpionEntity;
+import com.meshi.entity.WalkingMushroomEntity;
 import com.meshi.registry.ModEntities;
 import java.util.ArrayList;
 import java.util.List;
@@ -14,7 +15,12 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySelector;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.animal.Cow;
+import net.minecraft.world.entity.animal.Pig;
+import net.minecraft.world.entity.animal.Sheep;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
@@ -33,34 +39,21 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
-/**
- * A scorpion burrow: a flat hole stuck on the SIDE of a block, like a painting or a button. Click the
- * side of a wall with the item and the hole appears there; the side it faces is where the scorpion
- * comes out. The hole is drawn at the bottom middle of the block face, so the scorpion crawls out at
- * floor level.
- *
- * When a player comes within TRIGGER_RANGE (and is on the open side of the wall) a Huge Scorpion
- * climbs out of the wall, as long as there is room for it. The burrow then rests for REARM_TICKS
- * before it can spawn another one (set REARM_TICKS to 0 for one scorpion per hole, ever).
- *
- * The scorpion starts INSIDE the wall, so walls should be at least 2 blocks thick behind the hole.
- */
+// flat hole on teh SIDE of a wall (like a button). the side you click = side the scorpion comes out of
+// player within TRIGGER_RANGE on the open side = scorpion climbs out if theres room, then burrow rests for REARM_TICKS
+// scorpion starts INSIDE the wall so walls need to be 2+ blocks thick behind the hole
+// once a scorpion lives here (hiding inside) the burrow wont spawn another one, the scorpion itself pops out for prey
 @SuppressWarnings("deprecation")
 public class ScorpionBurrowBlock extends Block {
     public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
-    /** True while the burrow is ready to spawn a scorpion. */
     public static final BooleanProperty ARMED = BooleanProperty.create("armed");
 
-    /** How close a player has to get, in blocks. */
     public static final double TRIGGER_RANGE = 5.0D;
-    /** Ticks before the hole can spawn another scorpion (20 ticks = 1 second). 0 = never again. */
+    // 20 ticks = 1 sec, 0 = never again
     public static final int REARM_TICKS = 20 * 60 * 10;
-    /** A dropped food item this close (on the open side) also wakes the burrow. */
     public static final double FOOD_LURE_RANGE = 7.0D;
-    /** Ticks between two checks for a player nearby. */
     private static final int CHECK_INTERVAL = 10;
 
-    // A thin plate (2/16) against the wall, for each side the hole can face.
     private static final VoxelShape SHAPE_NORTH = Block.box(0.0D, 0.0D, 14.0D, 16.0D, 16.0D, 16.0D);
     private static final VoxelShape SHAPE_SOUTH = Block.box(0.0D, 0.0D, 0.0D, 16.0D, 16.0D, 2.0D);
     private static final VoxelShape SHAPE_EAST = Block.box(0.0D, 0.0D, 0.0D, 2.0D, 16.0D, 16.0D);
@@ -78,9 +71,8 @@ public class ScorpionBurrowBlock extends Block {
         builder.add(FACING, ARMED);
     }
 
-    // ---------------------------------------------------------------- placing it on a wall
 
-    /** The side you click is the side the hole faces. Only the four sides of a block work (not top or bottom). */
+    // side you click is the side it faces, only the 4 sides (no top/bottom)
     @Override
     public BlockState getStateForPlacement(BlockPlaceContext context) {
         Direction face = context.getClickedFace();
@@ -91,7 +83,6 @@ public class ScorpionBurrowBlock extends Block {
         return state.canSurvive(context.getLevel(), context.getClickedPos()) ? state : null;
     }
 
-    /** The block behind the hole must have a solid face to stick to. */
     @Override
     public boolean canSurvive(BlockState state, LevelReader level, BlockPos pos) {
         Direction facing = state.getValue(FACING);
@@ -118,7 +109,6 @@ public class ScorpionBurrowBlock extends Block {
         };
     }
 
-    // ---------------------------------------------------------------- the ambush
 
     @Override
     public void onPlace(BlockState state, Level level, BlockPos pos, BlockState oldState, boolean movedByPiston) {
@@ -130,7 +120,6 @@ public class ScorpionBurrowBlock extends Block {
     @Override
     public void tick(BlockState state, ServerLevel level, BlockPos pos, RandomSource random) {
         if (!state.getValue(ARMED)) {
-            // Rested long enough: ready again.
             level.setBlock(pos, state.setValue(ARMED, true), 3);
             level.scheduleTick(pos, this, CHECK_INTERVAL);
             return;
@@ -142,7 +131,7 @@ public class ScorpionBurrowBlock extends Block {
                 (Entity e) -> EntitySelector.NO_SPECTATORS.test(e) && isOnOpenSide(pos, dir, e));
 
         boolean lured = player == null && foodNearby(level, pos, FOOD_LURE_RANGE);
-        if ((player != null || lured) && spawnScorpion(level, pos, dir)) {
+        if ((player != null || lured) && !hasResident(level, pos) && spawnScorpion(level, pos, dir)) {
             level.setBlock(pos, state.setValue(ARMED, false), 3);
             if (REARM_TICKS > 0) {
                 level.scheduleTick(pos, this, REARM_TICKS);
@@ -152,17 +141,14 @@ public class ScorpionBurrowBlock extends Block {
         }
     }
 
-    /** A player standing behind the wall does not count: only the open side. */
+    // Player BEHIND the wall dosnt count
     private static boolean isOnOpenSide(BlockPos pos, Direction dir, Entity entity) {
         double dx = entity.getX() - (pos.getX() + 0.5D);
         double dz = entity.getZ() - (pos.getZ() + 0.5D);
         return dx * dir.getStepX() + dz * dir.getStepZ() > -0.5D;
     }
 
-    /**
-     * Creates a scorpion inside the wall behind the hole and lets it climb out. Returns false (and
-     * spawns nothing) if there is no room for it in front of the wall.
-     */
+    // spawns the scorpion inside the wall n it climbs out, returns false if theres no room
     private boolean spawnScorpion(ServerLevel level, BlockPos pos, Direction dir) {
         HugeScorpionEntity scorpion = ModEntities.HUGE_SCORPION.get().create(level);
         if (scorpion == null) {
@@ -176,14 +162,42 @@ public class ScorpionBurrowBlock extends Block {
         return true;
     }
 
-    // ---------------------------------------------------------------- helpers (also used by the scorpion itself)
 
-    /** Anything edible: the scorpions go after dropped food. */
+    // is a scorpion hiding in this burrow right now?
+    private static boolean hasResident(ServerLevel level, BlockPos pos) {
+        return !level.getEntitiesOfClass(HugeScorpionEntity.class, new AABB(pos).inflate(3.0D),
+                s -> s.isHidden() && pos.equals(s.getHiddenBurrow())).isEmpty();
+    }
+
+    // what makes a hiding scorpion pop out: players (not creative), hostile mobs, cows sheep n pigs
+    public static boolean isPrey(LivingEntity entity) {
+        if (!entity.isAlive()) {
+            return false;
+        }
+        if (entity instanceof Player player) {
+            return !player.isSpectator() && !player.isCreative();
+        }
+        if (entity instanceof HugeScorpionEntity || entity instanceof WalkingMushroomEntity) {
+            return false;
+        }
+        return entity instanceof Enemy || entity instanceof Cow || entity instanceof Sheep || entity instanceof Pig;
+    }
+
+    // prey on the open side of the burrow within range
+    public static boolean preyNear(ServerLevel level, BlockPos pos, double range) {
+        BlockState state = level.getBlockState(pos);
+        if (!(state.getBlock() instanceof ScorpionBurrowBlock)) {
+            return false;
+        }
+        Direction dir = state.getValue(FACING);
+        AABB box = new AABB(pos).inflate(range, 3.0D, range);
+        return !level.getEntitiesOfClass(LivingEntity.class, box, e -> isPrey(e) && isOnOpenSide(pos, dir, e)).isEmpty();
+    }
+
     public static boolean isFood(ItemEntity item) {
         return item.isAlive() && item.getItem().has(DataComponents.FOOD);
     }
 
-    /** Is there dropped food within range of the burrow, on its open side? */
     public static boolean foodNearby(ServerLevel level, BlockPos pos, double range) {
         BlockState state = level.getBlockState(pos);
         if (!(state.getBlock() instanceof ScorpionBurrowBlock)) {
@@ -194,18 +208,15 @@ public class ScorpionBurrowBlock extends Block {
         return !level.getEntitiesOfClass(ItemEntity.class, box, e -> isFood(e) && isOnOpenSide(pos, dir, e)).isEmpty();
     }
 
-    /** The middle of the hole on the wall face, at floor level. */
     public static Vec3 planeOf(BlockPos pos, Direction dir) {
         return new Vec3(pos.getX() + 0.5D - dir.getStepX() * 0.5D, pos.getY(), pos.getZ() + 0.5D - dir.getStepZ() * 0.5D);
     }
 
-    /** Which way the burrow at pos faces, or the fallback if there is no burrow there any more. */
     public static Direction facingOf(ServerLevel level, BlockPos pos, Direction fallback) {
         BlockState state = level.getBlockState(pos);
         return state.getBlock() instanceof ScorpionBurrowBlock ? state.getValue(FACING) : fallback;
     }
 
-    /** Where a scorpion stands in front of the hole, or null if there is no burrow at pos. */
     public static Vec3 frontSpot(ServerLevel level, BlockPos pos) {
         BlockState state = level.getBlockState(pos);
         if (!(state.getBlock() instanceof ScorpionBurrowBlock)) {
@@ -217,12 +228,10 @@ public class ScorpionBurrowBlock extends Block {
                 dir.getStepZ() * HugeScorpionEntity.EMERGE_END_OUTSIDE);
     }
 
-    /** Wall chips for the dust that comes off a burrow. */
     public static ParticleOptions chipsFor(ServerLevel level, BlockPos pos, Direction dir) {
         return new BlockParticleOption(ParticleTypes.BLOCK, level.getBlockState(pos.relative(dir.getOpposite())));
     }
 
-    /** Every loaded burrow within rangeXZ blocks sideways and rangeY blocks up or down of center. */
     public static List<BlockPos> findBurrows(ServerLevel level, BlockPos center, double rangeXZ, int rangeY) {
         int r = (int) Math.ceil(rangeXZ);
         List<BlockPos> found = new ArrayList<>();
@@ -235,18 +244,13 @@ public class ScorpionBurrowBlock extends Block {
         return found;
     }
 
-    /** A random burrow near "from" other than "from" itself, or null if there is none. */
     public static BlockPos pickOtherBurrow(ServerLevel level, BlockPos from, double range, RandomSource random) {
         List<BlockPos> burrows = findBurrows(level, from, range, 12);
         burrows.remove(from);
         return burrows.isEmpty() ? null : burrows.get(random.nextInt(burrows.size()));
     }
 
-    /**
-     * Puts the scorpion inside the wall behind the burrow at pos, facing out, and starts its climb out.
-     * With checkRoom it first makes sure there is space in front of the wall, and if not it returns false
-     * and leaves the scorpion exactly where it was.
-     */
+    // checkRoom = make sure theres space infront of the wall first, if not returns false and scorpion stays put
     public static boolean placeEmerging(ServerLevel level, BlockPos pos, BlockState state,
                                         HugeScorpionEntity scorpion, boolean checkRoom) {
         if (!(state.getBlock() instanceof ScorpionBurrowBlock)) {
@@ -271,13 +275,13 @@ public class ScorpionBurrowBlock extends Block {
             }
         }
 
-        // It starts inside the wall, facing out.
         scorpion.moveTo(plane.x - dir.getStepX() * HugeScorpionEntity.EMERGE_START_INSIDE, plane.y,
                 plane.z - dir.getStepZ() * HugeScorpionEntity.EMERGE_START_INSIDE, yaw, 0.0F);
         scorpion.setYBodyRot(yaw);
         scorpion.setYHeadRot(yaw);
         scorpion.yBodyRotO = yaw;
         scorpion.yHeadRotO = yaw;
+        scorpion.setHome(pos);
         scorpion.startEmerging(plane, chipsFor(level, pos, dir));
         return true;
     }

@@ -55,55 +55,33 @@ import software.bernie.geckolib.animation.PlayState;
 import software.bernie.geckolib.animation.RawAnimation;
 import software.bernie.geckolib.util.GeckoLibUtil;
 
-/**
- * The walking mushroom: a small, common, deliberately weak dungeon mob (8 HP, a half-heart headbutt).
- *
- * <b>It can only be sliced vertically</b> (as in the series). A hit counts as a vertical slice when a
- * blade (sword, axe, Farmer's Delight knife) lands as a falling critical hit, the "jump and chop down" attack.
- * Sweeping hits can never be criticals, so sideways swings are excluded automatically. A proper slice kills
- * it outright. Anything else (a normal hit, a punch, an arrow, a pickaxe...) only makes it go *boing*:
- * half a heart of damage at most, it never dies from those, and it hops with a squeak.
- *
- * <b>Hit it with a stick</b> and it is knocked out for 15 seconds: it tips over, snores and floats little
- * z's. Another stick hit resets the timer; any other hit wakes it up.
- *
- * Other things it does:
- *  - Disguise: it stands still like a plain mushroom (body sunk into the ground, legs gone) and pops up
- *    when a player comes within 4 blocks (2 blocks if the player sneaks). It also hides again by itself
- *    after a while without company. Test with  /summon meshi:walking_mushroom ~ ~ ~ {Disguised:1b}
- *  - Conga: awake mushrooms nearby follow each other in a line.
- *  - Pack alarm: when one is hit, knocked out or popped, the others nearby pop up and go for the player.
- *  - Snack: dropped mushrooms, fungi and bone meal lure it (see MushroomSnackGoal). It eats, heals and hops happily.
- *  - Trip: while running at a player it sometimes face-plants and is stunned for a moment.
- *  - Headbutt: the "attack" animation, then it is dizzy for a second (see MushroomBonkGoal).
- *
- * It drops a Mush Corpse (dice it on a cutting board for Mush Body and Mush Feet), see
- * data/meshi/loot_table/entities/walking_mushroom.json.
- */
+// walking mushroom, small common weak dungeon mob (8hp, half heart headbutt)
+// ONLY dies to a vertical slice: a blade (sword/axe/FD knife) landing as a falling crit, the jump n chop down attack. sweeps cant crit so sideways swings dont count
+// anything else just goes boing: half a heart max, it never dies from those
+// stick hit = knocked out 15s (floating z's), another stick hit resets teh timer, any other hit wakes it
+// extras: disguise (pops up at 4 blocks, 2 if sneaking), conga, pack alarm, snacks (MushroomSnackGoal), trips while chasing, headbutt (MushroomBonkGoal)
+// drops mush corpse (loot_table/entities/walking_mushroom.json)
+// test: /summon meshi:walking_mushroom ~ ~ ~ {Disguised:1b}
 public class WalkingMushroomEntity extends Monster implements GeoEntity {
-    // ---- Tweak these ---------------------------------------------------------------------------------
-    /** How long a stick knockout lasts, in ticks (20 ticks = 1 second). */
+    // stick knockout length in ticks
     public static final int KNOCKOUT_TICKS = 20 * 15;
-    /** Damage from a hit that is not a vertical slice (it never drops below 0.5 HP from these). */
+    // dmg from hits that arent a vertical slice (never goes below 0.5 hp from these)
     private static final float WRONG_HIT_DAMAGE = 0.5F;
-    /** A disguised mushroom pops up when a player gets this close (halved when the player sneaks). */
+    // disguised one pops up when a plyaer gets this close (halved if sneaking)
     private static final double DETECT_RANGE = 4.0D;
-    /** Other walking mushrooms this close hear the alarm. */
     private static final double PACK_RANGE = 12.0D;
-    /** A mushroom that has been left alone this long (no target, no player within 12 blocks) may hide again. */
     private static final int CALM_TICKS_TO_HIDE = 20 * 20;
-    /** 1 in this many ticks (while chasing at speed) it trips over its own feet. */
+    // 1 in this many ticks it trips while chasing
     private static final int TRIP_ODDS = 260;
     private static final int TRIP_TICKS = 24;
     private static final int TRIP_COOLDOWN = 160;
-    /** Ticks it stands still while the pop-up / wake-up / happy hop animations play. */
+    // ticks it stands still for pop up / wake up / happy hop anims
     private static final int POP_HOLD = 12;
     private static final int WAKE_HOLD = 14;
     private static final int HAPPY_HOLD = 14;
-    /** Ticks before it wants another snack (30 s). */
     private static final int SNACK_COOLDOWN = 20 * 30;
 
-    /** Things that cut: swords, axes and knives (Farmer's Delight knives are in c:tools/knife). */
+    // swords axes n knives (FD knives are c:tools/knife)
     private static final List<TagKey<Item>> BLADE_TAGS = List.of(
             itemTag("minecraft", "swords"), itemTag("minecraft", "axes"),
             itemTag("c", "tools/knife"), itemTag("c", "tools/sword"), itemTag("c", "tools/axe"));
@@ -126,9 +104,7 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
 
     private final AnimatableInstanceCache cache = GeckoLibUtil.createInstanceCache(this);
 
-    // Server side only.
     private int knockoutTicks = 0;
-    /** Ticks it must stand still for an animation (pop up, wake up, trip, happy hop). */
     private int holdTicks = 0;
     private int tripCooldown = 0;
     private int snackCooldown = 0;
@@ -143,9 +119,9 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
 
     public static AttributeSupplier.Builder createAttributes() {
         return Monster.createMonsterAttributes()
-                .add(Attributes.MAX_HEALTH, 8.0D)            // 4 hearts
-                .add(Attributes.MOVEMENT_SPEED, 0.22D)       // about a zombie's pace, easy to outrun
-                .add(Attributes.ATTACK_DAMAGE, 1.0D)         // half a heart
+                .add(Attributes.MAX_HEALTH, 8.0D)  // 4 hearts
+                .add(Attributes.MOVEMENT_SPEED, 0.22D)  // about zombie pace, easy to outrun
+                .add(Attributes.ATTACK_DAMAGE, 1.0D)  // half a heart
                 .add(Attributes.ATTACK_KNOCKBACK, 0.3D)
                 .add(Attributes.FOLLOW_RANGE, 14.0D);
     }
@@ -156,7 +132,7 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
 
     @Override
     protected void registerGoals() {
-        // While it is asleep, hidden or playing an animation it does nothing else.
+        // asleep / hidden / playing an anim = does nothing else
         this.goalSelector.addGoal(0, new Goal() {
             {
                 this.setFlags(EnumSet.of(Flag.MOVE, Flag.LOOK));
@@ -189,7 +165,6 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
         this.targetSelector.addGoal(2, new NearestAttackableTargetGoal<>(this, Player.class, true));
     }
 
-    // ---------------------------------------------------------------- state
 
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
@@ -214,7 +189,6 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
         this.entityData.set(KNOCKED_OUT, value);
     }
 
-    /** Asleep, hidden or playing an animation: it cannot walk, look around or fight. (Real value on the server only.) */
     public boolean isBusy() {
         return isDisguised() || isKnockedOut() || this.holdTicks > 0;
     }
@@ -223,7 +197,6 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
         return this.snackCooldown;
     }
 
-    /** A disguised or sleeping mushroom cannot pick a fight. */
     @Override
     public void setTarget(LivingEntity target) {
         if (target != null && (isDisguised() || isKnockedOut())) {
@@ -232,7 +205,6 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
         super.setTarget(target);
     }
 
-    /** Players it will chase (the same ones a zombie would: not creative, not spectators). */
     private static boolean isChaseable(Entity entity) {
         return entity instanceof Player player && !player.isCreative() && !player.isSpectator();
     }
@@ -246,7 +218,6 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
                 spread, spread * 0.6D, spread, 0.02D);
     }
 
-    // ---------------------------------------------------------------- ticking
 
     @Override
     public void tick() {
@@ -286,7 +257,6 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
             wakeUp(server, false);
             return;
         }
-        // A "z" and a soft snore every 1.25 seconds.
         if (this.tickCount % 25 == 0) {
             server.sendParticles(ModParticles.ZZZ.get(), getX(), getY() + 0.9D, getZ(), 1, 0.12D, 0.05D, 0.12D, 0.0D);
             sfx(server, ModSounds.MUSHROOM_SNORE, 0.5F, 1.0F);
@@ -299,7 +269,7 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
             return;
         }
         Player player = server.getNearestPlayer(getX(), getY(), getZ(), DETECT_RANGE, EntitySelector.NO_SPECTATORS);
-        // Sneaking up works: a sneaking player has to get within half the distance.
+        // sneaking works, half the distance
         if (player != null && (!player.isShiftKeyDown() || player.distanceToSqr(this) < 4.0D)) {
             popUp(player, true);
         }
@@ -308,7 +278,7 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
     private void tickAwake(ServerLevel server) {
         LivingEntity target = getTarget();
 
-        // Left alone for a while: squat down and pretend to be a plain mushroom.
+        // left alone abit: squats down as a plain mushroom
         if (target != null) {
             this.calmTicks = 0;
         } else if (this.tickCount % 20 == 0) {
@@ -323,7 +293,6 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
             }
         }
 
-        // Chasing at speed: now and then it trips over its own feet.
         if (target != null && this.tripCooldown == 0 && this.holdTicks == 0 && this.onGround() && !this.isInWater()
                 && this.random.nextInt(TRIP_ODDS) == 0
                 && this.getDeltaMovement().horizontalDistanceSqr() > 0.0025D
@@ -332,9 +301,7 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
         }
     }
 
-    // ---------------------------------------------------------------- the things it can do
 
-    /** Squat down and look like a plain mushroom. */
     public void disguise(ServerLevel server) {
         setDisguised(true);
         setTarget(null);
@@ -346,7 +313,6 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
         server.sendParticles(ParticleTypes.POOF, getX(), getY() + 0.1D, getZ(), 4, 0.15D, 0.02D, 0.15D, 0.01D);
     }
 
-    /** Springs out of the ground and (for a player it can chase) goes after them. */
     public void popUp(LivingEntity cause, boolean alertNeighbours) {
         if (!isDisguised() || !(this.level() instanceof ServerLevel server)) {
             return;
@@ -362,7 +328,6 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
             setTarget(cause);
         }
         if (alertNeighbours) {
-            // A patch of mushrooms right next to it pops up together.
             for (WalkingMushroomEntity other : server.getEntitiesOfClass(WalkingMushroomEntity.class,
                     getBoundingBox().inflate(3.0D, 2.0D, 3.0D), m -> m != this && m.isAlive() && m.isDisguised())) {
                 other.popUp(cause, false);
@@ -370,7 +335,6 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
         }
     }
 
-    /** Hit with a stick: out cold. Another stick hit while it sleeps starts the timer over. */
     private void knockOut(ServerLevel server, LivingEntity hitter) {
         boolean alreadyOut = isKnockedOut();
         setDisguised(false);
@@ -382,7 +346,6 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
         this.getNavigation().stop();
 
         sfx(server, ModSounds.MUSHROOM_BONK, 1.0F, 1.0F);
-        // A ring of dizzy stars around its head.
         for (int i = 0; i < 8; i++) {
             double angle = Math.PI * 2.0D * i / 8.0D;
             server.sendParticles(ParticleTypes.CRIT, getX() + Math.cos(angle) * 0.3D, getY() + 1.0D,
@@ -394,7 +357,6 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
         }
     }
 
-    /** Wakes up (the timer ran out, or something hurt it) with a yawn and a little hop. */
     private void wakeUp(ServerLevel server, boolean hurt) {
         setKnockedOut(false);
         this.knockoutTicks = 0;
@@ -407,7 +369,6 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
         }
     }
 
-    /** Trips over its own feet while running: a face-plant, then it hops back up. */
     private void trip(ServerLevel server) {
         this.holdTicks = TRIP_TICKS;
         this.tripCooldown = TRIP_COOLDOWN;
@@ -419,7 +380,6 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
         server.sendParticles(ParticleTypes.CRIT, getX(), getY() + 0.5D, getZ(), 6, 0.3D, 0.3D, 0.3D, 0.1D);
     }
 
-    /** Everyone close by hears it: sleepers stay asleep, the hidden pop up, the rest go for the player. */
     private void alertPack(LivingEntity cause) {
         if (this.alarmCooldown > 0 || !(this.level() instanceof ServerLevel server)) {
             return;
@@ -451,15 +411,12 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
         server.sendParticles(ParticleTypes.ANGRY_VILLAGER, getX(), getY() + 1.2D, getZ(), 1, 0.15D, 0.1D, 0.15D, 0.0D);
     }
 
-    // ---------------------------------------------------------------- snacks (see MushroomSnackGoal)
 
-    /** Dropped mushrooms, fungi and bone meal. */
     public static boolean isSnack(ItemStack stack) {
         return stack.is(Items.RED_MUSHROOM) || stack.is(Items.BROWN_MUSHROOM) || stack.is(Items.BONE_MEAL)
                 || stack.is(Items.CRIMSON_FUNGUS) || stack.is(Items.WARPED_FUNGUS);
     }
 
-    /** A bite: crumbs fly and it munches. */
     public void chew(ItemStack stack) {
         if (this.level() instanceof ServerLevel server) {
             Vec3 forward = Vec3.directionFromRotation(0.0F, this.getYRot()).scale(0.2D);
@@ -469,7 +426,6 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
         }
     }
 
-    /** Finished eating: a little heal, hearts, a happy trill and two hops. */
     public void finishSnack() {
         this.snackCooldown = SNACK_COOLDOWN;
         this.holdTicks = HAPPY_HOLD;
@@ -482,14 +438,11 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
         }
     }
 
-    // ---------------------------------------------------------------- headbutt (see MushroomBonkGoal)
 
-    /** Close enough to headbutt? (The mushroom is small, so this looks at the gap between the hitboxes.) */
     public boolean inBonkRange(LivingEntity target, double slack) {
         return this.getBoundingBox().inflate(0.45D + slack, 0.3D, 0.45D + slack).intersects(target.getBoundingBox());
     }
 
-    /** Called when the headbutt animation starts. */
     public void attackStartEffects() {
         triggerAnim("action", "attack");
         if (this.level() instanceof ServerLevel server) {
@@ -497,7 +450,6 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
         }
     }
 
-    /** The headbutt lands: a half-heart of damage and a puff of spores. */
     public void bonk(LivingEntity target) {
         if (doHurtTarget(target) && this.level() instanceof ServerLevel server) {
             server.sendParticles(ParticleTypes.CRIMSON_SPORE, target.getX(), target.getY() + target.getBbHeight() * 0.6D,
@@ -505,7 +457,6 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
         }
     }
 
-    /** Dizzy stars over its head after a headbutt (called every few ticks by the goal). */
     public void dizzyFx() {
         if (this.level() instanceof ServerLevel server) {
             double angle = this.tickCount * 0.6D;
@@ -514,7 +465,7 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
         }
     }
 
-    // ---------------------------------------------------------------- getting hit
+    // ---- getting hit
 
     @Override
     public boolean hurt(DamageSource source, float amount) {
@@ -525,7 +476,7 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
 
         Entity attacker = source.getEntity();
         if (attacker == null) {
-            // Fire, lava, falling, drowning, cactus...: ordinary damage. It wakes up and pops up if it was out of action.
+            // fire, lava, fall, drowning etc = normal dmg, wakes it up
             boolean hurt = super.hurt(source, amount);
             if (hurt) {
                 if (isDisguised()) {
@@ -543,28 +494,26 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
             LivingEntity hitter = (LivingEntity) attacker;
             ItemStack weapon = hitter.getMainHandItem();
 
-            // A stick bonk: knocked out cold, no damage.
+            // stick bonk = knocked out, no dmg
             if (hitter instanceof Player && weapon.is(Items.STICK)) {
                 knockOut(server, hitter);
                 return false;
             }
-            // The one cut that works: a blade, coming down from above.
+            // teh one cut that works, a blade from above
             if (isBlade(weapon) && isOverheadChop(hitter)) {
                 slice(server, source, hitter);
                 return true;
             }
             return bounce(server, source, hitter, isBlade(weapon));
         }
-        // Arrows, tridents, fireballs, explosions, potions...: boing.
+        // arrows etc = boing
         return bounce(server, source, attacker, false);
     }
 
-    /** A hit that is not a vertical slice: half a heart at most, a squeaky hop, and everybody nearby is alarmed. */
     private boolean bounce(ServerLevel server, DamageSource source, Entity attacker, boolean wieldingBlade) {
         if (isDisguised()) {
             popUp(attacker instanceof LivingEntity living ? living : null, true);
         }
-        // It never dies from these: it stops losing health at half a heart.
         float damage = Math.max(0.0F, Math.min(WRONG_HIT_DAMAGE, getHealth() - 1.0F));
         boolean hurt = super.hurt(source, damage);
         if (hurt) {
@@ -586,17 +535,15 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
         return hurt;
     }
 
-    /** The vertical slice: it is cut clean in two. */
     private void slice(ServerLevel server, DamageSource source, LivingEntity hitter) {
         alertPack(hitter);
         double x = getX();
         double y = getY();
         double z = getZ();
-        // A bright line down the middle...
         for (int i = 0; i < 12; i++) {
             server.sendParticles(ParticleTypes.CRIT, x, y + i * 0.1D, z, 1, 0.02D, 0.0D, 0.02D, 0.0D);
         }
-        // ...and the two halves of spores fly apart sideways (count 0 = the offsets are a direction).
+        // halves fly apart sideways (count 0 = offsets are a direction)
         Vec3 side = Vec3.directionFromRotation(0.0F, this.getYRot() + 90.0F);
         for (int i = 0; i < 10; i++) {
             server.sendParticles(ParticleTypes.CRIMSON_SPORE, x + side.x * 0.1D, y + 0.4D + i * 0.07D, z + side.z * 0.1D,
@@ -624,16 +571,12 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
         return false;
     }
 
-    /**
-     * "Came down from above": the same test the game uses for a critical hit (falling, not on the ground,
-     * not climbing, not swimming, not sprinting). Sweeping attacks can never be criticals.
-     */
+    // same test the game uses for a crit (falling, not on ground / climbing / swimming / sprinting)
     private static boolean isOverheadChop(LivingEntity attacker) {
         return attacker.fallDistance > 0.0F && !attacker.onGround() && !attacker.onClimbable() && !attacker.isInWater()
                 && !attacker.hasEffect(MobEffects.BLINDNESS) && !attacker.isPassenger() && !attacker.isSprinting();
     }
 
-    // ---------------------------------------------------------------- save / load
 
     @Override
     public void addAdditionalSaveData(CompoundTag tag) {
@@ -650,7 +593,6 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
         setDisguised(tag.getBoolean("Disguised") && this.knockoutTicks <= 0);
     }
 
-    // ---------------------------------------------------------------- sounds and client particles
 
     @Override
     protected SoundEvent getAmbientSound() {
@@ -672,7 +614,6 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
         this.playSound(ModSounds.MUSHROOM_STEP.get(), 0.4F, 1.0F);
     }
 
-    /** Little puffs of mycelium dust under its feet while it walks (client side, only the people looking see it). */
     @Override
     public void aiStep() {
         super.aiStep();
@@ -684,13 +625,11 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
         }
     }
 
-    // ---------------------------------------------------------------- animation
 
     @Override
     public void registerControllers(AnimatableManager.ControllerRegistrar controllers) {
-        // Body: walk / idle, or hidden / asleep.
         controllers.add(new AnimationController<>(this, "main", 5, this::mainPredicate));
-        // One-shots (headbutt, pop up, wake up, trip, happy hop, startle) play on top, triggered by name.
+        // one shots (headbutt, pop up, wake up, trip, happy hop, startle) play on top, triggered by name
         controllers.add(new AnimationController<>(this, "action", 0, state -> PlayState.STOP)
                 .triggerableAnim("attack", ATTACK)
                 .triggerableAnim("pop_up", POP_UP)

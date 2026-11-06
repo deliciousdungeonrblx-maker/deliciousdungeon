@@ -29,12 +29,8 @@ public class HugeScorpionModel extends GeoModel<HugeScorpionEntity> {
         return ANIMATION;
     }
 
-    /**
-     * The "emerge" animation slides the root bone forward 20 units. While emerging, the scorpion
-     * itself walks out of the wall instead (so its hitbox comes with it), so that slide is cancelled
-     * here. Without this the model would travel twice as far as the entity and snap back at the end.
-     * The little side-to-side wobble in the animation is kept.
-     */
+    // emerge anim slides teh root bone fwd 20 units but the entity walks out by itself, so the slide is cancelled here
+    // otherwise the model goes twice as far n snaps back at the end. the side wobble stays
     @Override
     public void setCustomAnimations(HugeScorpionEntity scorpion, long instanceId, AnimationState<HugeScorpionEntity> state) {
         super.setCustomAnimations(scorpion, instanceId, state);

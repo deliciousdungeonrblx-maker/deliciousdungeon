@@ -15,7 +15,7 @@ public class ModEntities {
     public static final DeferredRegister<EntityType<?>> ENTITY_TYPES =
             DeferredRegister.create(Registries.ENTITY_TYPE, Meshi.MODID);
 
-    // Hitbox is 1.4 wide x 2.9 tall (the model is hunched, so a bit under its 3 block T-pose height).
+    // hitbox 1.4 x 2.9 (moedl is hunched)
     public static final DeferredHolder<EntityType<?>, EntityType<EarthGolemEntity>> EARTH_GOLEM =
             ENTITY_TYPES.register("earth_golem", () ->
                     EntityType.Builder.<EarthGolemEntity>of(EarthGolemEntity::new, MobCategory.MONSTER)
@@ -23,8 +23,7 @@ public class ModEntities {
                             .clientTrackingRange(10)
                             .build("earth_golem"));
 
-    // The model is about 1.1 x 1.5 x 0.56 blocks and is drawn at 2x (HugeScorpionEntity.MODEL_SCALE), so
-    // about 2.2 wide, 3 long and 1.1 tall. The hitbox is a square: 2.4 wide x 1.2 tall.
+    // model is drawn at 2x (MODEL_SCALE), hitbox is a square 2.4 wide 1.2 tall
     public static final DeferredHolder<EntityType<?>, EntityType<HugeScorpionEntity>> HUGE_SCORPION =
             ENTITY_TYPES.register("huge_scorpion", () ->
                     EntityType.Builder.<HugeScorpionEntity>of(HugeScorpionEntity::new, MobCategory.MONSTER)
@@ -32,7 +31,7 @@ public class ModEntities {
                             .clientTrackingRange(10)
                             .build("huge_scorpion"));
 
-    // The model is 0.5 wide and about 1.1 tall (17.75 pixels), so the hitbox is 0.5 x 1.1.
+    // hitbox 0.5 x 1.1
     public static final DeferredHolder<EntityType<?>, EntityType<WalkingMushroomEntity>> WALKING_MUSHROOM =
             ENTITY_TYPES.register("walking_mushroom", () ->
                     EntityType.Builder.<WalkingMushroomEntity>of(WalkingMushroomEntity::new, MobCategory.MONSTER)
@@ -40,8 +39,7 @@ public class ModEntities {
                             .clientTrackingRange(8)
                             .build("walking_mushroom"));
 
-    // The mound model lies flat, about 3 blocks wide and under half a block tall. This is the
-    // clickable area in its middle: 2.0 wide, 0.6 tall.
+    // mound is flat, this is just the clickable area in the middle, 2.0 x 0.6
     public static final DeferredHolder<EntityType<?>, EntityType<SoilMoundEntity>> SOIL_MOUND =
             ENTITY_TYPES.register("soil_mound", () ->
                     EntityType.Builder.<SoilMoundEntity>of(SoilMoundEntity::new, MobCategory.MISC)
