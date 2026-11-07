@@ -4,11 +4,14 @@ import com.meshi.Meshi;
 import com.meshi.entity.WalkingMushroomEntity;
 import com.meshi.registry.ModEntities;
 import com.mojang.brigadier.arguments.LongArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.suggestion.SuggestionProvider;
 import com.mojang.brigadier.context.CommandContext;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
@@ -42,6 +45,9 @@ public class DungeonEvents {
 
     private static DungeonBuilder builder = null;
 
+    private static final SuggestionProvider<CommandSourceStack> ROOM_SUGGEST =
+            (ctx, sb) -> SharedSuggestionProvider.suggest(RoomStore.KEYS, sb);
+
     private static boolean isDungeon(Level level) {
         return level.dimension().equals(DIMENSION);
     }
@@ -59,7 +65,19 @@ public class DungeonEvents {
                                         .executes(ctx -> generate(ctx, LongArgumentType.getLong(ctx, "seed"), false))))
                         .then(Commands.literal("regenerate")
                                 .executes(ctx -> generate(ctx, System.nanoTime(), true)))
-                        .then(Commands.literal("tp").executes(DungeonEvents::teleport))));
+                        .then(Commands.literal("tp").executes(DungeonEvents::teleport))
+                        .then(Commands.literal("room")
+                                .then(Commands.literal("list").executes(DungeonEvents::roomList))
+                                .then(Commands.literal("edit")
+                                        .then(Commands.argument("room", StringArgumentType.word()).suggests(ROOM_SUGGEST)
+                                                .executes(ctx -> roomEdit(ctx, false))))
+                                .then(Commands.literal("reload")
+                                        .then(Commands.argument("room", StringArgumentType.word()).suggests(ROOM_SUGGEST)
+                                                .executes(ctx -> roomEdit(ctx, true))))
+                                .then(Commands.literal("save").executes(DungeonEvents::roomSave))
+                                .then(Commands.literal("reset")
+                                        .then(Commands.argument("room", StringArgumentType.word()).suggests(ROOM_SUGGEST)
+                                                .executes(DungeonEvents::roomReset))))));
     }
 
     private static int generate(CommandContext<CommandSourceStack> ctx, long seed, boolean force) {
@@ -113,6 +131,99 @@ public class DungeonEvents {
         }
         BlockPos s = data.spawn;
         player.teleportTo(level, s.getX() + 0.5D, s.getY(), s.getZ() + 0.5D, 0.0F, 0.0F);
+        return 1;
+    }
+
+    // ---- room editing: /meshi dungeon room list|edit|reload|save|reset
+
+    private static String roomArg(CommandContext<CommandSourceStack> ctx) {
+        String key = StringArgumentType.getString(ctx, "room");
+        if (!RoomStore.KEYS.contains(key)) {
+            ctx.getSource().sendFailure(Component.literal("no room called " + key + ", use /meshi dungeon room list"));
+            return null;
+        }
+        return key;
+    }
+
+    private static int roomList(CommandContext<CommandSourceStack> ctx) {
+        ServerLevel level = ctx.getSource().getServer().getLevel(DIMENSION);
+        if (level == null) {
+            ctx.getSource().sendFailure(Component.literal("meshi:dungeon dimension not found"));
+            return 0;
+        }
+        RoomStore store = RoomStore.get(level);
+        StringBuilder sb = new StringBuilder("rooms (* = you edited it):");
+        for (String key : RoomStore.KEYS) {
+            sb.append("\n ").append(store.has(key) ? "* " : "  ").append(key);
+        }
+        ctx.getSource().sendSuccess(() -> Component.literal(sb.toString()), false);
+        return 1;
+    }
+
+    // goes to the edit plot of a room (builds it the first time). reload = throw away unsaved changes
+    private static int roomEdit(CommandContext<CommandSourceStack> ctx, boolean reload) {
+        CommandSourceStack src = ctx.getSource();
+        String key = roomArg(ctx);
+        if (key == null) {
+            return 0;
+        }
+        ServerLevel level = src.getServer().getLevel(DIMENSION);
+        ServerPlayer player = src.getPlayer();
+        if (level == null || player == null) {
+            src.sendFailure(Component.literal("players only, and the dungeon dimension has to exist"));
+            return 0;
+        }
+        RoomStore store = RoomStore.get(level);
+        if (reload || !store.isPlotBuilt(key)) {
+            DungeonBuilder.buildPlot(level, key, true);
+            store.markPlot(key);
+        }
+        BlockPos at = DungeonBuilder.plotSpawn(key);
+        player.teleportTo(level, at.getX() + 0.5D, at.getY(), at.getZ() + 0.5D, 0.0F, 0.0F);
+        String doors = RoomStore.singleEntrance(key)
+                ? "this room has ONE entrance, keep it on the north side."
+                : "keep all 4 doorways open, the generator walls up the ones it doesnt need.";
+        src.sendSuccess(() -> Component.literal("editing " + key + ". " + doors
+                + " build what you want (creative, watch the trap plates), then stand inside and use /meshi dungeon room save"), false);
+        return 1;
+    }
+
+    private static int roomSave(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack src = ctx.getSource();
+        ServerLevel level = src.getServer().getLevel(DIMENSION);
+        ServerPlayer player = src.getPlayer();
+        if (level == null || player == null || player.level() != level) {
+            src.sendFailure(Component.literal("stand inside an edit plot first (/meshi dungeon room edit <room>)"));
+            return 0;
+        }
+        String key = DungeonBuilder.plotKeyAt(player.blockPosition());
+        if (key == null) {
+            src.sendFailure(Component.literal("you are not inside an edit plot"));
+            return 0;
+        }
+        List<String> blocked = DungeonBuilder.blockedDoorways(level, key);
+        RoomStore.get(level).capture(key, level, DungeonBuilder.plotOrigin(key));
+        String warn = blocked.isEmpty() ? "" : " (careful, these doorways look blocked: " + String.join(", ", blocked) + ")";
+        src.sendSuccess(() -> Component.literal("saved " + key + warn
+                + ". new dungeons use it, run /meshi dungeon regenerate to rebuild the current one"), true);
+        return 1;
+    }
+
+    private static int roomReset(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack src = ctx.getSource();
+        String key = roomArg(ctx);
+        ServerLevel level = src.getServer().getLevel(DIMENSION);
+        if (key == null || level == null) {
+            return 0;
+        }
+        RoomStore store = RoomStore.get(level);
+        if (!store.has(key)) {
+            src.sendFailure(Component.literal(key + " has no edits"));
+            return 0;
+        }
+        store.remove(key);
+        src.sendSuccess(() -> Component.literal(key + " is back to the generated look. /meshi dungeon room reload " + key
+                + " redraws its plot"), true);
         return 1;
     }
 
@@ -213,6 +324,10 @@ public class DungeonEvents {
         MobSpawnType type = event.getSpawnType();
         if (type != MobSpawnType.NATURAL && type != MobSpawnType.CHUNK_GENERATION
                 && type != MobSpawnType.PATROL && type != MobSpawnType.REINFORCEMENT) {
+            return;
+        }
+        if (event.getEntity().getX() >= DungeonBuilder.EDIT_MIN_X) {
+            event.setSpawnCancelled(true);
             return;
         }
         EntityType<?> entity = event.getEntity().getType();

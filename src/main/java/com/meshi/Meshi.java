@@ -64,6 +64,7 @@ public class Meshi {
         if (event.getTabKey() == CreativeModeTabs.FOOD_AND_DRINKS) {
             event.accept(ModItems.HOTPOT);
             event.accept(ModItems.HOTPOT_SERVING);
+            event.accept(ModItems.MUSHROOM_POTION);
         }
     }
 }

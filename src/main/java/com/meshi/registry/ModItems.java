@@ -3,6 +3,7 @@ package com.meshi.registry;
 import com.meshi.Meshi;
 import com.meshi.item.GolemSoilItem;
 import com.meshi.item.HotpotServingItem;
+import com.meshi.item.MushroomPotionItem;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.food.FoodProperties;
@@ -81,4 +82,7 @@ public class ModItems {
     public static final DeferredItem<BlockItem> HOTPOT =
             ITEMS.register("hotpot", () ->
                     new BlockItem(ModBlocks.HOTPOT.get(), new Item.Properties().stacksTo(1)));
+
+    public static final DeferredItem<MushroomPotionItem> MUSHROOM_POTION =
+            ITEMS.register("mushroom_potion", () -> new MushroomPotionItem(new Item.Properties().stacksTo(16)));
 }

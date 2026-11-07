@@ -3,6 +3,7 @@ package com.meshi.registry;
 import com.meshi.Meshi;
 import com.meshi.entity.EarthGolemEntity;
 import com.meshi.entity.HugeScorpionEntity;
+import com.meshi.entity.MushroomPotionEntity;
 import com.meshi.entity.SoilMoundEntity;
 import com.meshi.entity.WalkingMushroomEntity;
 import net.minecraft.core.registries.Registries;
@@ -48,4 +49,13 @@ public class ModEntities {
                             .updateInterval(20)
                             .fireImmune()
                             .build("soil_mound"));
+
+    // thrown potion, small like the vanilla one
+    public static final DeferredHolder<EntityType<?>, EntityType<MushroomPotionEntity>> MUSHROOM_POTION =
+            ENTITY_TYPES.register("mushroom_potion", () ->
+                    EntityType.Builder.<MushroomPotionEntity>of(MushroomPotionEntity::new, MobCategory.MISC)
+                            .sized(0.25F, 0.25F)
+                            .clientTrackingRange(4)
+                            .updateInterval(10)
+                            .build("mushroom_potion"));
 }

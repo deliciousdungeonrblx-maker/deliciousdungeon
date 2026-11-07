@@ -8,6 +8,7 @@ import com.meshi.entity.WalkingMushroomEntity;
 import com.meshi.registry.ModBlocks;
 import com.meshi.registry.ModEntities;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
@@ -18,6 +19,8 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.level.block.Rotation;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
@@ -47,6 +50,11 @@ public class DungeonBuilder {
     public final DungeonLayout layout;
     private final long seed;
     private final ArrayDeque<Tile> queue = new ArrayDeque<>();
+    private final RoomStore store;
+    // plot = one tile built on its own for editing, no mobs, no saved data touched
+    private final boolean plotMode;
+    private boolean useSaved = true;
+    private final List<int[]> golemSpots = new ArrayList<>();
 
     // current tile
     Tile tile;
@@ -54,10 +62,26 @@ public class DungeonBuilder {
     int bx, bz, yb;
     boolean[][] open;
 
+    // edit plots live far away from the dungeon (x = 3300+, z = 3300)
+    public static final int PLOT_TILE_X = 300;
+    public static final int PLOT_TILE_Z = 300;
+    public static final int EDIT_MIN_X = PLOT_TILE_X * TILE - 60;
+
+    private DungeonBuilder(ServerLevel level, long seed) {
+        this.level = level;
+        this.data = new DungeonData();
+        this.seed = seed;
+        this.layout = null;
+        this.store = RoomStore.get(level);
+        this.plotMode = true;
+    }
+
     public DungeonBuilder(ServerLevel level, DungeonData data, long seed) {
         this.level = level;
         this.data = data;
         this.seed = seed;
+        this.store = RoomStore.get(level);
+        this.plotMode = false;
         this.layout = new DungeonLayout(seed);
         for (int f = 0; f < DungeonLayout.FLOORS; f++) {
             for (int x = 0; x < DungeonLayout.GRID; x++) {
@@ -201,6 +225,7 @@ public class DungeonBuilder {
         this.yb = TOP_Y - t.floor * FLOOR_H;
         this.rng = new Random(this.seed ^ (t.floor * 1000003L + t.x * 1009L + t.z * 31L));
         this.open = new boolean[TILE][TILE];
+        this.golemSpots.clear();
 
         for (int lx = 0; lx < TILE; lx++) {
             for (int lz = 0; lz < TILE; lz++) {
@@ -244,6 +269,192 @@ public class DungeonBuilder {
         if (t.type == Type.ARRIVAL && t.floor > 0) {
             DungeonRooms.stairsBottom(this);
         }
+
+        // user edited version of this room? stamp it over the generated one
+        String key = RoomStore.keyOf(t);
+        if (key != null && this.useSaved && this.store.has(key)) {
+            stamp(this.store.get(key), key, t);
+        }
+        if (!this.plotMode) {
+            for (int[] g : this.golemSpots) {
+                spawnGolem(g[0], g[1]);
+            }
+        }
+    }
+
+    // ---- edited rooms
+
+    // clockwise quarter turns that bring the north door to the given side
+    private static int stepsFor(int side) {
+        return side == DungeonLayout.E ? 1 : side == DungeonLayout.S ? 2 : side == DungeonLayout.W ? 3 : 0;
+    }
+
+    // turn a local x,z a number of 90 degree steps clockwise around the tile centre
+    private static int[] turn(int x, int z, int steps) {
+        for (int i = 0; i < steps; i++) {
+            int nx = TILE - 1 - z;
+            z = x;
+            x = nx;
+        }
+        return new int[]{x, z};
+    }
+
+    private static BlockState turnState(BlockState s, Rotation rotation, int steps) {
+        if (steps == 0) {
+            return s;
+        }
+        BlockState r = s.rotate(rotation);
+        // our own blocks (burrow) dont rotate by themselves
+        if (r == s && s.hasProperty(BlockStateProperties.HORIZONTAL_FACING)) {
+            r = s.setValue(BlockStateProperties.HORIZONTAL_FACING,
+                    rotation.rotate(s.getValue(BlockStateProperties.HORIZONTAL_FACING)));
+        }
+        return r;
+    }
+
+    // x0, x1, z0, z1 of the doorway cells on a side (the cells that stick out of the room / the hall arm)
+    private static int[] doorBox(Type type, int side) {
+        if (type == Type.HALL) {
+            return side == DungeonLayout.N ? new int[]{4, 6, 0, 3} : side == DungeonLayout.E ? new int[]{7, 10, 4, 6}
+                    : side == DungeonLayout.S ? new int[]{4, 6, 7, 10} : new int[]{0, 3, 4, 6};
+        }
+        return side == DungeonLayout.N ? new int[]{4, 6, 0, 0} : side == DungeonLayout.E ? new int[]{10, 10, 4, 6}
+                : side == DungeonLayout.S ? new int[]{4, 6, 10, 10} : new int[]{0, 0, 4, 6};
+    }
+
+    private void stamp(RoomStore.Room room, String key, Tile t) {
+        boolean single = RoomStore.singleEntrance(key);
+        int steps = 0;
+        if (single && !this.plotMode) {
+            for (int side : new int[]{DungeonLayout.N, DungeonLayout.E, DungeonLayout.S, DungeonLayout.W}) {
+                if (t.has(side)) {
+                    steps = stepsFor(side);
+                    break;
+                }
+            }
+        }
+        Rotation rotation = Rotation.values()[steps];
+        for (int x = 0; x < TILE; x++) {
+            for (int z = 0; z < TILE; z++) {
+                int[] p = turn(x, z, steps);
+                for (int rel = 0; rel < FLOOR_H; rel++) {
+                    BlockState s = turnState(room.get(x, rel, z), rotation, steps);
+                    setL(p[0], rel, p[1], s);
+                    if (s.is(Blocks.CHEST)) {
+                        lootChest(world(p[0], rel, p[1]));
+                    } else if (s.is(Blocks.DISPENSER)
+                            && this.level.getBlockEntity(world(p[0], rel, p[1])) instanceof DispenserBlockEntity d) {
+                        d.setItem(0, new ItemStack(Items.ARROW, 64));
+                    }
+                }
+            }
+        }
+        if (single) {
+            // golem room keeps its 3 golems, turned with the room
+            if (key.equals("golem")) {
+                this.golemSpots.clear();
+                for (int[] c : new int[][]{{3, 4}, {7, 4}, {5, 7}}) {
+                    this.golemSpots.add(turn(c[0], c[1], steps));
+                }
+            }
+        } else {
+            // saved with every doorway open, wall up the ones this tile doesnt connect to
+            for (int side : new int[]{DungeonLayout.N, DungeonLayout.E, DungeonLayout.S, DungeonLayout.W}) {
+                if (t.has(side)) {
+                    continue;
+                }
+                int[] b = doorBox(t.type, side);
+                for (int x = b[0]; x <= b[1]; x++) {
+                    for (int z = b[2]; z <= b[3]; z++) {
+                        for (int rel = 1; rel <= 5; rel++) {
+                            setL(x, rel, z, wallBlock(rel));
+                        }
+                    }
+                }
+            }
+            if (t.type == Type.HALL && t.plate) {
+                setL(5, 0, 5, ModBlocks.SLIME_TRAP_PLATE.get().defaultBlockState());
+            }
+        }
+    }
+
+    private void lootChest(BlockPos pos) {
+        if (this.level.getBlockEntity(pos) instanceof RandomizableContainerBlockEntity c) {
+            c.setLootTable(ResourceKey.create(Registries.LOOT_TABLE, ResourceLocation.withDefaultNamespace("chests/simple_dungeon")));
+            c.setLootTableSeed(this.rng.nextLong());
+        }
+    }
+
+    // ---- edit plots (one per room key, spaced 2 tiles apart)
+
+    public static BlockPos plotOrigin(String key) {
+        int i = RoomStore.KEYS.indexOf(key);
+        return new BlockPos((PLOT_TILE_X + 2 * i) * TILE, TOP_Y, PLOT_TILE_Z * TILE);
+    }
+
+    // where the player lands, on a clear spot by the entrance
+    public static BlockPos plotSpawn(String key) {
+        return plotOrigin(key).offset(5, 1, 1);
+    }
+
+    // which plot is this position in (null = none)
+    public static String plotKeyAt(BlockPos p) {
+        for (String key : RoomStore.KEYS) {
+            BlockPos o = plotOrigin(key);
+            if (p.getX() >= o.getX() - 4 && p.getX() <= o.getX() + TILE + 3
+                    && p.getZ() >= o.getZ() - 4 && p.getZ() <= o.getZ() + TILE + 3
+                    && p.getY() >= o.getY() - 3 && p.getY() <= o.getY() + FLOOR_H + 6) {
+                return key;
+            }
+        }
+        return null;
+    }
+
+    private static Tile plotTile(String key) {
+        int i = RoomStore.KEYS.indexOf(key);
+        Tile t = new Tile(0, PLOT_TILE_X + 2 * i, PLOT_TILE_Z);
+        t.mask = RoomStore.singleEntrance(key) ? DungeonLayout.N
+                : DungeonLayout.N | DungeonLayout.E | DungeonLayout.S | DungeonLayout.W;
+        if (key.equals("spawn")) t.type = Type.SPAWN;
+        else if (key.startsWith("hall_")) t.type = Type.HALL;
+        else if (key.startsWith("dead_end_")) t.type = Type.DEAD_END;
+        else if (key.equals("golem")) t.type = Type.GOLEM;
+        else if (key.equals("slime_room")) t.type = Type.SLIME_ROOM;
+        else if (key.equals("arrow_gallery")) t.type = Type.ARROW_GALLERY;
+        else if (key.equals("scorpion_room")) t.type = Type.SCORPION_ROOM;
+        else t.type = Type.ROUND_ROOM;
+        if (key.contains("_") && Character.isDigit(key.charAt(key.length() - 1))) {
+            t.variant = key.charAt(key.length() - 1) - '0';
+        }
+        return t;
+    }
+
+    // builds the plot for a room (the saved version if there is one, else the generated look)
+    public static void buildPlot(ServerLevel level, String key, boolean useSaved) {
+        DungeonBuilder b = new DungeonBuilder(level, 12345L);
+        b.useSaved = useSaved;
+        b.buildTile(plotTile(key));
+    }
+
+    // doorways that are blocked in a plot (names of the sides), used to warn before saving
+    public static List<String> blockedDoorways(ServerLevel level, String key) {
+        List<String> out = new ArrayList<>();
+        BlockPos o = plotOrigin(key);
+        int[] sides = RoomStore.singleEntrance(key) ? new int[]{DungeonLayout.N}
+                : new int[]{DungeonLayout.N, DungeonLayout.E, DungeonLayout.S, DungeonLayout.W};
+        Type type = plotTile(key).type;
+        for (int side : sides) {
+            int[] b = doorBox(type, side);
+            if (key.equals("golem")) {
+                continue;
+            }
+            BlockPos c = o.offset((b[0] + b[1]) / 2, 1, (b[2] + b[3]) / 2);
+            if (!level.getBlockState(c).getCollisionShape(level, c).isEmpty()) {
+                out.add(side == DungeonLayout.N ? "north" : side == DungeonLayout.E ? "east"
+                        : side == DungeonLayout.S ? "south" : "west");
+            }
+        }
+        return out;
     }
 
     private void corridorMask(Tile t) {
@@ -296,6 +507,10 @@ public class DungeonBuilder {
             }
             BlockPos p = spots.get(i);
             m.moveTo(p.getX() + 0.5D, p.getY(), p.getZ() + 0.5D, this.rng.nextFloat() * 360.0F, 0.0F);
+            if (!this.level.noCollision(m)) {
+                m.discard();
+                continue;
+            }
             m.setPersistenceRequired();
             this.level.addFreshEntity(m);
             this.data.mushrooms.add(m.getUUID());
@@ -309,6 +524,10 @@ public class DungeonBuilder {
 
     // used by DungeonRooms
     void golemAt(int lx, int lz) {
+        this.golemSpots.add(new int[]{lx, lz});
+    }
+
+    private void spawnGolem(int lx, int lz) {
         EarthGolemEntity golem = ModEntities.EARTH_GOLEM.get().create(this.level);
         if (golem == null) {
             return;
