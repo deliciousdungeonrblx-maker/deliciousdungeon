@@ -32,6 +32,18 @@ public class ModItems {
             ITEMS.register("scorpion_burrow", () ->
                     new BlockItem(ModBlocks.SCORPION_BURROW.get(), new Item.Properties()));
 
+    public static final DeferredItem<BlockItem> SLIME_TRAP_PLATE =
+            ITEMS.register("slime_trap_plate", () ->
+                    new BlockItem(ModBlocks.SLIME_TRAP_PLATE.get(), new Item.Properties()));
+
+    public static final DeferredItem<BlockItem> RANDOM_TRAP_PLATE =
+            ITEMS.register("random_trap_plate", () ->
+                    new BlockItem(ModBlocks.RANDOM_TRAP_PLATE.get(), new Item.Properties()));
+
+    public static final DeferredItem<BlockItem> ARROW_TRAP_PLATE =
+            ITEMS.register("arrow_trap_plate", () ->
+                    new BlockItem(ModBlocks.ARROW_TRAP_PLATE.get(), new Item.Properties()));
+
     public static final DeferredItem<GolemSoilItem> GOLEM_SOIL =
             ITEMS.register("golem_soil", () -> new GolemSoilItem(new Item.Properties().stacksTo(16)));
 

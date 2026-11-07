@@ -1,0 +1,13 @@
+{
+  "type": "meshi:dungeon",
+  "generator": {
+    "type": "minecraft:flat",
+    "settings": {
+      "biome": "meshi:dungeon",
+      "features": false,
+      "lakes": false,
+      "layers": [],
+      "structure_overrides": []
+    }
+  }
+}

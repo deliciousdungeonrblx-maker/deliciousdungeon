@@ -1,5 +1,7 @@
 package com.meshi;
 
+import com.meshi.dungeon.DungeonEvents;
+import net.neoforged.neoforge.common.NeoForge;
 import com.meshi.entity.EarthGolemEntity;
 import com.meshi.entity.HugeScorpionEntity;
 import com.meshi.entity.WalkingMushroomEntity;
@@ -27,6 +29,8 @@ public class Meshi {
         ModSounds.SOUND_EVENTS.register(modEventBus);
         ModParticles.PARTICLE_TYPES.register(modEventBus);
 
+        NeoForge.EVENT_BUS.register(DungeonEvents.class);
+
         modEventBus.addListener(this::registerAttributes);
         modEventBus.addListener(this::addCreativeTabItems);
     }
@@ -45,6 +49,9 @@ public class Meshi {
         }
         if (event.getTabKey() == CreativeModeTabs.FUNCTIONAL_BLOCKS) {
             event.accept(ModItems.SCORPION_BURROW);
+            event.accept(ModItems.SLIME_TRAP_PLATE);
+            event.accept(ModItems.RANDOM_TRAP_PLATE);
+            event.accept(ModItems.ARROW_TRAP_PLATE);
         }
         if (event.getTabKey() == CreativeModeTabs.INGREDIENTS) {
             event.accept(ModItems.GOLEM_SOIL);

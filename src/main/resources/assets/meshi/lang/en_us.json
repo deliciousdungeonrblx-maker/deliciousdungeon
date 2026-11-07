@@ -33,5 +33,8 @@
   "subtitles.meshi.mushroom_alarm": "Walking Mushroom sounds the alarm",
   "subtitles.meshi.mushroom_trip": "Walking Mushroom trips",
   "subtitles.meshi.mushroom_bonk": "Walking Mushroom is bonked",
-  "subtitles.meshi.mushroom_attack": "Walking Mushroom headbutts"
+  "subtitles.meshi.mushroom_attack": "Walking Mushroom headbutts",
+  "block.meshi.slime_trap_plate": "Slime Trap Floor",
+  "block.meshi.random_trap_plate": "Random Trap Floor",
+  "block.meshi.arrow_trap_plate": "Arrow Trap Floor"
 }
