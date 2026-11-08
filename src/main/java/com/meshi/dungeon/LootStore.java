@@ -247,7 +247,7 @@ public class LootStore extends SavedData {
         Pool f1 = new Pool();
         f1.minRolls = 2;
         f1.maxRolls = 4;
-        row(f1, 0, s(Items.BREAD, 3), s(Items.TORCH, 8), s(Items.ARROW, 8), s(Items.COOKED_POTATO, 3),
+        row(f1, 0, s(Items.BREAD, 3), s(Items.TORCH, 8), s(Items.ARROW, 8), s(Items.BAKED_POTATO, 3),
                 s(Items.BONE, 3), s(Items.STRING, 4), s(Items.COAL, 4), s(Items.APPLE, 2));
         row(f1, 1, s(Items.IRON_NUGGET, 6), s(Items.GOLD_NUGGET, 6), s(Items.LEATHER, 3),
                 s(Items.COOKED_CHICKEN, 2), s(Items.COOKED_BEEF, 2));
