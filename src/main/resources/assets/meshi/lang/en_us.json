@@ -37,6 +37,7 @@
   "block.meshi.slime_trap_plate": "Slime Trap Floor",
   "block.meshi.random_trap_plate": "Random Trap Floor",
   "block.meshi.arrow_trap_plate": "Arrow Trap Floor",
+  "block.meshi.fire_trap_plate": "Fire Trap Floor",
   "item.meshi.mushroom_potion": "Splash Potion of Mushrooms",
   "entity.meshi.mushroom_potion": "Splash Potion of Mushrooms"
 }

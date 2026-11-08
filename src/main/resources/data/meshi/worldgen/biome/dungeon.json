@@ -7,12 +7,34 @@
     "sky_color": 0,
     "fog_color": 0,
     "water_color": 4159204,
-    "water_fog_color": 329011
+    "water_fog_color": 329011,
+    "mood_sound": {
+      "sound": "minecraft:ambient.cave",
+      "tick_delay": 2400,
+      "block_search_extent": 8,
+      "offset": 2.0
+    },
+    "music": {
+      "sound": "minecraft:music.overworld.deep_dark",
+      "min_delay": 1200,
+      "max_delay": 4800,
+      "replace_current_music": false
+    }
   },
   "spawners": {
     "monster": [
-      { "type": "minecraft:zombie", "weight": 100, "minCount": 1, "maxCount": 3 },
-      { "type": "minecraft:skeleton", "weight": 100, "minCount": 1, "maxCount": 3 }
+      {
+        "type": "minecraft:zombie",
+        "weight": 100,
+        "minCount": 1,
+        "maxCount": 2
+      },
+      {
+        "type": "minecraft:skeleton",
+        "weight": 100,
+        "minCount": 1,
+        "maxCount": 2
+      }
     ],
     "creature": [],
     "ambient": [],

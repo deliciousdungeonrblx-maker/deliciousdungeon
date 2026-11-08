@@ -1,6 +1,7 @@
 package com.meshi.registry;
 
 import com.meshi.Meshi;
+import com.meshi.block.FireTrapPlateBlock;
 import com.meshi.block.HotpotBlock;
 import com.meshi.block.ScorpionBurrowBlock;
 import com.meshi.block.TrapFloorBlock;
@@ -33,6 +34,12 @@ public class ModBlocks {
 
     public static final DeferredBlock<TrapFloorBlock> ARROW_TRAP_PLATE =
             BLOCKS.register("arrow_trap_plate", () -> new TrapFloorBlock(trapProps(), TrapFloorBlock.Kind.ARROWS));
+
+    // burns while stood on, see FireTrapPlateBlock
+    public static final DeferredBlock<FireTrapPlateBlock> FIRE_TRAP_PLATE =
+            BLOCKS.register("fire_trap_plate", () -> new FireTrapPlateBlock(
+                    BlockBehaviour.Properties.ofFullCopy(Blocks.MUD_BRICKS)
+                            .lightLevel(state -> state.getValue(FireTrapPlateBlock.LIT) ? 10 : 0)));
 
     private static BlockBehaviour.Properties trapProps() {
         return BlockBehaviour.Properties.ofFullCopy(Blocks.MUD_BRICKS);

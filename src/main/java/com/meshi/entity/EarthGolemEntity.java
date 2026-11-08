@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import com.meshi.dungeon.DungeonBuilder;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.syncher.EntityDataAccessor;
@@ -33,7 +34,9 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import software.bernie.geckolib.animatable.GeoEntity;
 import software.bernie.geckolib.animatable.instance.AnimatableInstanceCache;
@@ -68,6 +71,11 @@ public class EarthGolemEntity extends Monster implements GeoEntity {
     private long growTicks = SoilMoundEntity.GROW_TICKS;
     private boolean deathHandled = false;
 
+    // golem only goes after players inside this room, so no door camping. null = no limit
+    private AABB room = null;
+    private boolean roomChecked = false;
+    private static final ResourceLocation DUNGEON_DIM = ResourceLocation.fromNamespaceAndPath("meshi", "dungeon");
+
     public EarthGolemEntity(EntityType<? extends EarthGolemEntity> type, Level level) {
         super(type, level);
         this.xpReward = 20;
@@ -92,7 +100,7 @@ public class EarthGolemEntity extends Monster implements GeoEntity {
         this.goalSelector.addGoal(5, new RandomLookAroundGoal(this));
 
         this.targetSelector.addGoal(1, new HurtByTargetGoal(this));
-        this.targetSelector.addGoal(2, new NearestAttackableTargetGoal<>(this, Player.class, true));
+        this.targetSelector.addGoal(2, new NearestAttackableTargetGoal<>(this, Player.class, 10, true, false, this::canChase));
     }
 
 
@@ -133,6 +141,29 @@ public class EarthGolemEntity extends Monster implements GeoEntity {
         setHasCrops(!this.crops.isEmpty());
     }
 
+    public void setRoom(double x0, double y0, double z0, double x1, double y1, double z1) {
+        this.room = new AABB(x0, y0, z0, x1, y1, z1);
+        this.restrictTo(BlockPos.containing(this.room.getCenter()), 5);
+    }
+
+    // true if the golem is allowed to go after this one (always true when it has no room)
+    public boolean canChase(LivingEntity target) {
+        return this.room == null || this.room.contains(target.getX(), target.getY(), target.getZ());
+    }
+
+    @Override
+    public void setTarget(LivingEntity target) {
+        super.setTarget(target != null && !canChase(target) ? null : target);
+    }
+
+    // golems that were built before rooms existed: the room is the dungeon tile they stand in
+    private void inferRoom() {
+        int bx = Math.floorDiv(this.blockPosition().getX(), DungeonBuilder.TILE) * DungeonBuilder.TILE;
+        int bz = Math.floorDiv(this.blockPosition().getZ(), DungeonBuilder.TILE) * DungeonBuilder.TILE;
+        int yb = DungeonBuilder.TOP_Y - DungeonBuilder.floorOfY(this.blockPosition().getY()) * DungeonBuilder.FLOOR_H;
+        setRoom(bx + 1, yb, bz + 1, bx + DungeonBuilder.TILE - 1, yb + 6, bz + DungeonBuilder.TILE - 1);
+    }
+
     public void setGrowTicks(long ticks) {
         this.growTicks = ticks > 0 ? ticks : SoilMoundEntity.GROW_TICKS;
     }
@@ -143,6 +174,10 @@ public class EarthGolemEntity extends Monster implements GeoEntity {
         tag.putBoolean("HasCrops", hasCrops());
         tag.putInt("RiseTicks", getRiseTicks());
         tag.putLong("GrowTicks", this.growTicks);
+        if (this.room != null) {
+            tag.putIntArray("Room", new int[]{(int) this.room.minX, (int) this.room.minY, (int) this.room.minZ,
+                    (int) this.room.maxX, (int) this.room.maxY, (int) this.room.maxZ});
+        }
         GolemCrop.writeList(tag, this.crops);
     }
 
@@ -154,6 +189,10 @@ public class EarthGolemEntity extends Monster implements GeoEntity {
         if (tag.contains("GrowTicks")) {
             setGrowTicks(tag.getLong("GrowTicks"));
         }
+        int[] r = tag.getIntArray("Room");
+        if (r.length == 6) {
+            setRoom(r[0], r[1], r[2], r[3], r[4], r[5]);
+        }
         this.crops.clear();
         this.crops.addAll(GolemCrop.readList(tag, SoilMoundEntity.MAX_SEEDS));
     }
@@ -161,6 +200,18 @@ public class EarthGolemEntity extends Monster implements GeoEntity {
     @Override
     public void tick() {
         super.tick();
+        if (!this.level().isClientSide) {
+            if (!this.roomChecked && this.tickCount > 2) {
+                this.roomChecked = true;
+                if (this.room == null && this.isPersistenceRequired() && this.level().dimension().location().equals(DUNGEON_DIM)) {
+                    inferRoom();
+                }
+            }
+            // target walked out of the room (or was never in it): let go and stay home
+            if (this.tickCount % 10 == 0 && getTarget() != null && !canChase(getTarget())) {
+                setTarget(null);
+            }
+        }
         if (!this.level().isClientSide && isRising()) {
             this.getNavigation().stop();
             if (this.level() instanceof ServerLevel server) {

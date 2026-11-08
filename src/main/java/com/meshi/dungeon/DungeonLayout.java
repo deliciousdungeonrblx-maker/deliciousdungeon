@@ -10,12 +10,14 @@ import java.util.Random;
 // tile type decides if its a hallway piece or a room. DungeonBuilder turns it into blocks
 public final class DungeonLayout {
     public static final int FLOORS = 3;
-    public static final int GRID = 6;
+    public static final int DEFAULT_GRID = 10;
+    public static final int MIN_GRID = 6;
+    public static final int MAX_GRID = 16;
 
     // bit per side
     public static final int N = 1, E = 2, S = 4, W = 8;
 
-    public enum Type { SPAWN, HALL, DEAD_END, GOLEM, STAIRS, ARRIVAL, SLIME_ROOM, ARROW_GALLERY, SCORPION_ROOM, ROUND_ROOM }
+    public enum Type { SPAWN, HALL, DEAD_END, GOLEM, STAIRS, ARRIVAL, SLIME_ROOM, ARROW_GALLERY, SCORPION_ROOM, ROUND_ROOM, SAFEZONE }
 
     public static final class Tile {
         public final int floor, x, z;
@@ -39,18 +41,21 @@ public final class DungeonLayout {
         }
     }
 
-    public final Tile[][][] tiles = new Tile[FLOORS][GRID][GRID];
+    public final int grid;
+    public final Tile[][][] tiles;
     public final int startX, startZ;
 
-    public DungeonLayout(long seed) {
+    public DungeonLayout(long seed, int grid) {
+        this.grid = Math.max(MIN_GRID, Math.min(MAX_GRID, grid));
+        this.tiles = new Tile[FLOORS][this.grid][this.grid];
         Random rng = new Random(seed);
-        int sx = 1 + rng.nextInt(GRID - 2);
-        int sz = 1 + rng.nextInt(GRID - 2);
+        int sx = 1 + rng.nextInt(this.grid - 2);
+        int sz = 1 + rng.nextInt(this.grid - 2);
         this.startX = sx;
         this.startZ = sz;
         for (int f = 0; f < FLOORS; f++) {
-            for (int x = 0; x < GRID; x++) {
-                for (int z = 0; z < GRID; z++) {
+            for (int x = 0; x < this.grid; x++) {
+                for (int z = 0; z < this.grid; z++) {
                     this.tiles[f][x][z] = new Tile(f, x, z);
                 }
             }
@@ -84,7 +89,7 @@ public final class DungeonLayout {
         int[] sides = {N, E, S, W};
 
         // dfs maze
-        boolean[][] seen = new boolean[GRID][GRID];
+        boolean[][] seen = new boolean[this.grid][this.grid];
         ArrayDeque<int[]> stack = new ArrayDeque<>();
         stack.push(new int[]{sx, sz});
         seen[sx][sz] = true;
@@ -96,7 +101,7 @@ public final class DungeonLayout {
             for (int side : order) {
                 int nx = c[0] + dx(side);
                 int nz = c[1] + dz(side);
-                if (nx < 0 || nz < 0 || nx >= GRID || nz >= GRID || seen[nx][nz]) {
+                if (nx < 0 || nz < 0 || nx >= this.grid || nz >= this.grid || seen[nx][nz]) {
                     continue;
                 }
                 link(f, c[0], c[1], side);
@@ -111,19 +116,20 @@ public final class DungeonLayout {
         }
 
         // a few loops so its not only one path
-        for (int i = 0; i < 4; i++) {
-            int x = rng.nextInt(GRID);
-            int z = rng.nextInt(GRID);
+        int loops = Math.max(4, this.grid * this.grid / 9);
+        for (int i = 0; i < loops; i++) {
+            int x = rng.nextInt(this.grid);
+            int z = rng.nextInt(this.grid);
             int side = sides[rng.nextInt(4)];
             int nx = x + dx(side);
             int nz = z + dz(side);
-            if (nx >= 0 && nz >= 0 && nx < GRID && nz < GRID) {
+            if (nx >= 0 && nz >= 0 && nx < this.grid && nz < this.grid) {
                 link(f, x, z, side);
             }
         }
 
         // distance from start, farthest tile gets the stairs
-        int[][] dist = new int[GRID][GRID];
+        int[][] dist = new int[this.grid][this.grid];
         for (int[] row : dist) {
             java.util.Arrays.fill(row, -1);
         }
@@ -159,8 +165,8 @@ public final class DungeonLayout {
 
         List<Tile> leaves = new ArrayList<>();
         List<Tile> middles = new ArrayList<>();
-        for (int x = 0; x < GRID; x++) {
-            for (int z = 0; z < GRID; z++) {
+        for (int x = 0; x < this.grid; x++) {
+            for (int z = 0; z < this.grid; z++) {
                 Tile t = this.tiles[f][x][z];
                 if (t == start || (hasStairs && t == stairs)) {
                     continue;
@@ -172,19 +178,37 @@ public final class DungeonLayout {
         Collections.shuffle(middles, rng);
 
         // golem rooms only on leaves so they have exactly one (spruce door) entrance
-        int golems = Math.min(2, leaves.size());
+        int golems = Math.min(Math.max(2, this.grid / 3), leaves.size());
         for (int i = 0; i < leaves.size(); i++) {
             leaves.get(i).type = i < golems ? Type.GOLEM : Type.DEAD_END;
         }
 
-        // trap rooms, first floor is the gentle one
-        Type[] traps = f == 0
-                ? new Type[]{Type.SLIME_ROOM, Type.ARROW_GALLERY}
-                : new Type[]{Type.ROUND_ROOM, Type.SCORPION_ROOM, Type.SLIME_ROOM, Type.ARROW_GALLERY};
+        // safezones (editable rest rooms) go on tiles with 2+ exits
+        int safe = this.grid >= 12 ? 2 : 1;
+        for (Tile t : middles) {
+            if (safe > 0 && t.degree() >= 2) {
+                t.type = Type.SAFEZONE;
+                safe--;
+            }
+        }
+
+        // trap rooms, first floor is the gentle one. bigger floors get a second set
+        List<Type> traps = new ArrayList<>();
+        if (f == 0) {
+            traps.addAll(List.of(Type.SLIME_ROOM, Type.ARROW_GALLERY));
+        } else {
+            traps.addAll(List.of(Type.ROUND_ROOM, Type.SCORPION_ROOM, Type.SLIME_ROOM, Type.ARROW_GALLERY));
+        }
+        if (this.grid >= 9) {
+            traps.addAll(new ArrayList<>(traps));
+        }
         int ti = 0;
         for (Tile t : middles) {
-            if (ti < traps.length && t.degree() >= 2) {
-                t.type = traps[ti++];
+            if (t.type == Type.SAFEZONE) {
+                continue;
+            }
+            if (ti < traps.size() && t.degree() >= 2) {
+                t.type = traps.get(ti++);
             } else {
                 t.type = Type.HALL;
                 t.variant = rng.nextInt(4);

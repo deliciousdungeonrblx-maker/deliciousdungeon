@@ -52,6 +52,7 @@ public class Meshi {
             event.accept(ModItems.SLIME_TRAP_PLATE);
             event.accept(ModItems.RANDOM_TRAP_PLATE);
             event.accept(ModItems.ARROW_TRAP_PLATE);
+            event.accept(ModItems.FIRE_TRAP_PLATE);
         }
         if (event.getTabKey() == CreativeModeTabs.INGREDIENTS) {
             event.accept(ModItems.GOLEM_SOIL);

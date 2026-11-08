@@ -98,6 +98,10 @@ final class DungeonRooms {
             default -> {
             }
         }
+        // loot barrel in a corner of the middle, a bit more common the deeper you go (6% / 10% / 14%)
+        if (!t.plate && b.open[4][4] && b.rng.nextInt(100) < 6 + 4 * t.floor) {
+            b.barrel(4, 4);
+        }
         if (t.plate) {
             b.setL(5, 0, 5, ModBlocks.SLIME_TRAP_PLATE.get().defaultBlockState());
         }
@@ -141,11 +145,20 @@ final class DungeonRooms {
         b.spot(5, 5);
         int side = connectedSide(t);
         if (t.variant != 2) {
+            boolean barrel = t.variant == 3;
             switch (side) {
-                case DungeonLayout.N -> b.chest(5, 6, Direction.NORTH);
-                case DungeonLayout.S -> b.chest(5, 4, Direction.SOUTH);
-                case DungeonLayout.E -> b.chest(4, 5, Direction.EAST);
-                default -> b.chest(6, 5, Direction.WEST);
+                case DungeonLayout.N -> {
+                    if (barrel) b.barrel(5, 6); else b.chest(5, 6, Direction.NORTH);
+                }
+                case DungeonLayout.S -> {
+                    if (barrel) b.barrel(5, 4); else b.chest(5, 4, Direction.SOUTH);
+                }
+                case DungeonLayout.E -> {
+                    if (barrel) b.barrel(4, 5); else b.chest(4, 5, Direction.EAST);
+                }
+                default -> {
+                    if (barrel) b.barrel(6, 5); else b.chest(6, 5, Direction.WEST);
+                }
             }
         }
         if (t.variant == 1) {
@@ -238,18 +251,13 @@ final class DungeonRooms {
         roomSpots(b);
     }
 
+    // plates in 3 rows, every plate drops arrows on whoever stands on it (from the roof, see TrapFloorBlock)
     static void arrowGallery(DungeonBuilder b) {
         flatFloor(b);
         BlockState plate = ModBlocks.ARROW_TRAP_PLATE.get().defaultBlockState();
         for (int z : new int[]{3, 5, 7}) {
             for (int x = 1; x <= 9; x++) {
                 b.setL(x, 0, z, plate);
-                if (x == 1 && !b.open[0][z]) {
-                    b.dispenser(0, 2, z, Direction.EAST);
-                }
-                if (x == 9 && !b.open[10][z]) {
-                    b.dispenser(10, 2, z, Direction.WEST);
-                }
             }
         }
         b.torch(3, 3, 1, Direction.SOUTH);
@@ -307,5 +315,32 @@ final class DungeonRooms {
                 }
             }
         }
+    }
+
+    // ---- safezone. no mobs spawn in here and nothing hunts you inside. edit it ingame like any other room
+    // (/meshi dungeon room edit safezone). the barrel / chest use the "safezone" loot pool
+
+    static void safezone(DungeonBuilder b) {
+        for (int x = 3; x <= 7; x++) {
+            for (int z = 3; z <= 7; z++) {
+                b.setL(x, 0, z, Blocks.SPRUCE_PLANKS.defaultBlockState());
+            }
+        }
+        b.setL(5, 1, 5, Blocks.CAMPFIRE.defaultBlockState());
+        b.setL(3, 1, 5, seat(Direction.EAST));
+        b.setL(7, 1, 5, seat(Direction.WEST));
+        b.setL(5, 1, 3, seat(Direction.SOUTH));
+        b.setL(5, 1, 7, seat(Direction.NORTH));
+        b.setL(2, 1, 1, Blocks.CRAFTING_TABLE.defaultBlockState());
+        b.setL(3, 1, 1, Blocks.FURNACE.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.FurnaceBlock.FACING, Direction.SOUTH));
+        b.chest(8, 1, Direction.SOUTH, "safezone");
+        b.barrel(9, 2, "safezone");
+        cornerTorches(b);
+    }
+
+    private static BlockState seat(Direction facing) {
+        return Blocks.SPRUCE_STAIRS.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.StairBlock.FACING, facing);
     }
 }

@@ -3,6 +3,7 @@ package com.meshi.dungeon;
 import com.meshi.Meshi;
 import com.meshi.entity.WalkingMushroomEntity;
 import com.meshi.registry.ModEntities;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.LongArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
@@ -25,6 +26,9 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.level.Level;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
@@ -48,6 +52,11 @@ public class DungeonEvents {
     private static final SuggestionProvider<CommandSourceStack> ROOM_SUGGEST =
             (ctx, sb) -> SharedSuggestionProvider.suggest(RoomStore.KEYS, sb);
 
+    private static final SuggestionProvider<CommandSourceStack> POOL_SUGGEST = (ctx, sb) -> {
+        ServerLevel level = ctx.getSource().getServer().getLevel(DIMENSION);
+        return SharedSuggestionProvider.suggest(level == null ? List.<String>of() : LootStore.get(level).names(), sb);
+    };
+
     private static boolean isDungeon(Level level) {
         return level.dimension().equals(DIMENSION);
     }
@@ -60,11 +69,41 @@ public class DungeonEvents {
                 .requires(src -> src.hasPermission(2))
                 .then(Commands.literal("dungeon")
                         .then(Commands.literal("generate")
-                                .executes(ctx -> generate(ctx, System.nanoTime(), false))
+                                .executes(ctx -> generate(ctx, System.nanoTime(), false, DungeonLayout.DEFAULT_GRID))
                                 .then(Commands.argument("seed", LongArgumentType.longArg())
-                                        .executes(ctx -> generate(ctx, LongArgumentType.getLong(ctx, "seed"), false))))
+                                        .executes(ctx -> generate(ctx, LongArgumentType.getLong(ctx, "seed"), false, DungeonLayout.DEFAULT_GRID))
+                                        .then(Commands.argument("size", sizeArg())
+                                                .executes(ctx -> generate(ctx, LongArgumentType.getLong(ctx, "seed"), false,
+                                                        IntegerArgumentType.getInteger(ctx, "size"))))))
                         .then(Commands.literal("regenerate")
-                                .executes(ctx -> generate(ctx, System.nanoTime(), true)))
+                                .executes(ctx -> generate(ctx, System.nanoTime(), true, DungeonLayout.DEFAULT_GRID))
+                                .then(Commands.argument("size", sizeArg())
+                                        .executes(ctx -> generate(ctx, System.nanoTime(), true,
+                                                IntegerArgumentType.getInteger(ctx, "size")))))
+                        .then(Commands.literal("mobcap")
+                                .executes(DungeonEvents::mobCapShow)
+                                .then(Commands.argument("floor1", IntegerArgumentType.integer(0, 100))
+                                        .then(Commands.argument("floor2", IntegerArgumentType.integer(0, 100))
+                                                .then(Commands.argument("floor3", IntegerArgumentType.integer(0, 100))
+                                                        .executes(DungeonEvents::mobCapSet)))))
+                        .then(Commands.literal("loot")
+                                .then(Commands.literal("list").executes(DungeonEvents::lootList))
+                                .then(Commands.literal("edit")
+                                        .then(Commands.argument("pool", StringArgumentType.word()).suggests(POOL_SUGGEST)
+                                                .executes(DungeonEvents::lootEdit)))
+                                .then(Commands.literal("rolls")
+                                        .then(Commands.argument("pool", StringArgumentType.word()).suggests(POOL_SUGGEST)
+                                                .then(Commands.argument("min", IntegerArgumentType.integer(0, 54))
+                                                        .then(Commands.argument("max", IntegerArgumentType.integer(0, 54))
+                                                                .executes(DungeonEvents::lootRolls)))))
+                                .then(Commands.literal("reset")
+                                        .then(Commands.argument("pool", StringArgumentType.word()).suggests(POOL_SUGGEST)
+                                                .executes(DungeonEvents::lootReset)))
+                                .then(Commands.literal("bind")
+                                        .then(Commands.argument("pool", StringArgumentType.word()).suggests(POOL_SUGGEST)
+                                                .executes(DungeonEvents::lootBind)))
+                                .then(Commands.literal("unbind").executes(DungeonEvents::lootUnbind))
+                                .then(Commands.literal("refill").executes(DungeonEvents::lootRefill)))
                         .then(Commands.literal("tp").executes(DungeonEvents::teleport))
                         .then(Commands.literal("room")
                                 .then(Commands.literal("list").executes(DungeonEvents::roomList))
@@ -80,7 +119,11 @@ public class DungeonEvents {
                                                 .executes(DungeonEvents::roomReset))))));
     }
 
-    private static int generate(CommandContext<CommandSourceStack> ctx, long seed, boolean force) {
+    private static com.mojang.brigadier.arguments.ArgumentType<Integer> sizeArg() {
+        return IntegerArgumentType.integer(DungeonLayout.MIN_GRID, DungeonLayout.MAX_GRID);
+    }
+
+    private static int generate(CommandContext<CommandSourceStack> ctx, long seed, boolean force, int size) {
         CommandSourceStack src = ctx.getSource();
         ServerLevel level = src.getServer().getLevel(DIMENSION);
         if (level == null) {
@@ -107,8 +150,9 @@ public class DungeonEvents {
             old.forEach(Entity::discard);
         }
         data.reset();
-        builder = new DungeonBuilder(level, data, seed);
-        src.sendSuccess(() -> Component.literal("building the dungeon, seed " + seed + ". it takes a bit"), true);
+        builder = new DungeonBuilder(level, data, seed, size);
+        src.sendSuccess(() -> Component.literal("building the dungeon, seed " + seed + ", " + size + "x" + size
+                + " tiles per floor. your saved rooms get used. it takes a bit"), true);
         return 1;
     }
 
@@ -184,7 +228,8 @@ public class DungeonEvents {
                 ? "this room has ONE entrance, keep it on the north side."
                 : "keep all 4 doorways open, the generator walls up the ones it doesnt need.";
         src.sendSuccess(() -> Component.literal("editing " + key + ". " + doors
-                + " build what you want (creative, watch the trap plates), then stand inside and use /meshi dungeon room save"), false);
+                + " build what you want (creative, watch the trap plates). chests and barrels you place get loot from the floor pool"
+                + " (look at one and /meshi dungeon loot bind <pool> to pick another). then stand inside and use /meshi dungeon room save"), false);
         return 1;
     }
 
@@ -227,11 +272,190 @@ public class DungeonEvents {
         return 1;
     }
 
+    // ---- mob caps
+
+    private static int mobCapShow(CommandContext<CommandSourceStack> ctx) {
+        ServerLevel level = ctx.getSource().getServer().getLevel(DIMENSION);
+        if (level == null) {
+            ctx.getSource().sendFailure(Component.literal("meshi:dungeon dimension not found"));
+            return 0;
+        }
+        int[] c = DungeonData.get(level).mobCaps;
+        ctx.getSource().sendSuccess(() -> Component.literal("zombie + skeleton cap (loaded at once): floor 1 = " + c[0]
+                + ", floor 2 = " + c[1] + ", floor 3 = " + c[2] + ". change: /meshi dungeon mobcap <f1> <f2> <f3>"), false);
+        return 1;
+    }
+
+    private static int mobCapSet(CommandContext<CommandSourceStack> ctx) {
+        ServerLevel level = ctx.getSource().getServer().getLevel(DIMENSION);
+        if (level == null) {
+            ctx.getSource().sendFailure(Component.literal("meshi:dungeon dimension not found"));
+            return 0;
+        }
+        DungeonData data = DungeonData.get(level);
+        data.mobCaps = new int[]{IntegerArgumentType.getInteger(ctx, "floor1"), IntegerArgumentType.getInteger(ctx, "floor2"),
+                IntegerArgumentType.getInteger(ctx, "floor3")};
+        data.setDirty();
+        return mobCapShow(ctx);
+    }
+
+    // ---- loot: /meshi dungeon loot list|edit|rolls|reset|bind|unbind|refill
+
+    private static String poolArg(CommandContext<CommandSourceStack> ctx) {
+        String name = StringArgumentType.getString(ctx, "pool");
+        if (!name.matches("[a-z0-9_]{1,24}")) {
+            ctx.getSource().sendFailure(Component.literal("pool names are lowercase letters, numbers and _ (max 24)"));
+            return null;
+        }
+        return name;
+    }
+
+    private static int lootList(CommandContext<CommandSourceStack> ctx) {
+        ServerLevel level = ctx.getSource().getServer().getLevel(DIMENSION);
+        if (level == null) {
+            ctx.getSource().sendFailure(Component.literal("meshi:dungeon dimension not found"));
+            return 0;
+        }
+        LootStore store = LootStore.get(level);
+        StringBuilder sb = new StringBuilder("loot pools (floor_1/2/3 are used by that floor, deeper = better):");
+        for (String name : store.names()) {
+            LootStore.Pool p = store.get(name);
+            sb.append("\n ").append(name).append("  (").append(p.minRolls).append("-").append(p.maxRolls).append(" rolls)");
+        }
+        sb.append("\n edit one: /meshi dungeon loot edit <pool>. a new name makes a new pool");
+        ctx.getSource().sendSuccess(() -> Component.literal(sb.toString()), false);
+        return 1;
+    }
+
+    private static int lootEdit(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack src = ctx.getSource();
+        String pool = poolArg(ctx);
+        ServerLevel level = src.getServer().getLevel(DIMENSION);
+        ServerPlayer player = src.getPlayer();
+        if (pool == null || level == null || player == null) {
+            return 0;
+        }
+        LootStore.get(level).openEditor(player, pool);
+        src.sendSuccess(() -> Component.literal("row 1 = most common, row 6 = rarest. the stack size is the most you can get "
+                + "of that item in one roll. close the window to save. /meshi dungeon loot refill puts it in the dungeon"), false);
+        return 1;
+    }
+
+    private static int lootRolls(CommandContext<CommandSourceStack> ctx) {
+        String pool = poolArg(ctx);
+        ServerLevel level = ctx.getSource().getServer().getLevel(DIMENSION);
+        if (pool == null || level == null) {
+            return 0;
+        }
+        int min = IntegerArgumentType.getInteger(ctx, "min");
+        int max = IntegerArgumentType.getInteger(ctx, "max");
+        LootStore.get(level).setRolls(pool, min, max);
+        ctx.getSource().sendSuccess(() -> Component.literal(pool + " gives " + Math.min(min, max) + " to " + Math.max(min, max)
+                + " items per chest / barrel"), true);
+        return 1;
+    }
+
+    private static int lootReset(CommandContext<CommandSourceStack> ctx) {
+        String pool = poolArg(ctx);
+        ServerLevel level = ctx.getSource().getServer().getLevel(DIMENSION);
+        if (pool == null || level == null) {
+            return 0;
+        }
+        if (!LootStore.get(level).resetPool(pool)) {
+            ctx.getSource().sendFailure(Component.literal("no pool called " + pool));
+            return 0;
+        }
+        ctx.getSource().sendSuccess(() -> Component.literal(pool + " is back to the built in loot (or removed, if it was one you made)"), true);
+        return 1;
+    }
+
+    // look at a chest / barrel in an edit plot, then save the room: that container uses this pool in the dungeon
+    private static int lootBind(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack src = ctx.getSource();
+        String pool = poolArg(ctx);
+        ServerLevel level = src.getServer().getLevel(DIMENSION);
+        ServerPlayer player = src.getPlayer();
+        if (pool == null || level == null || player == null || player.level() != level) {
+            src.sendFailure(Component.literal("stand in an edit plot and look at a chest or barrel"));
+            return 0;
+        }
+        BlockPos pos = lookedAtContainer(player, level);
+        if (pos == null) {
+            src.sendFailure(Component.literal("look at a chest or barrel (within 6 blocks)"));
+            return 0;
+        }
+        if (DungeonBuilder.plotKeyAt(pos) == null) {
+            src.sendFailure(Component.literal("that one is not inside an edit plot"));
+            return 0;
+        }
+        LootStore store = LootStore.get(level);
+        boolean made = !store.has(pool);
+        store.getOrCreate(pool);
+        RoomStore.get(level).bindPlot(pos, pool);
+        src.sendSuccess(() -> Component.literal("that container now uses loot pool " + pool + (made ? " (new, empty pool, fill it with /meshi dungeon loot edit " + pool + ")" : "")
+                + ". save the room to keep it. a double chest needs both halves bound"), true);
+        return 1;
+    }
+
+    private static int lootUnbind(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack src = ctx.getSource();
+        ServerLevel level = src.getServer().getLevel(DIMENSION);
+        ServerPlayer player = src.getPlayer();
+        if (level == null || player == null || player.level() != level) {
+            src.sendFailure(Component.literal("stand in an edit plot and look at a chest or barrel"));
+            return 0;
+        }
+        BlockPos pos = lookedAtContainer(player, level);
+        if (pos == null || !RoomStore.get(level).unbindPlot(pos)) {
+            src.sendFailure(Component.literal("that container is not bound to a pool (it uses the floor pool)"));
+            return 0;
+        }
+        src.sendSuccess(() -> Component.literal("back to the normal floor pool. save the room to keep it"), true);
+        return 1;
+    }
+
+    private static BlockPos lookedAtContainer(ServerPlayer player, ServerLevel level) {
+        HitResult hit = player.pick(6.0D, 1.0F, false);
+        if (hit.getType() != HitResult.Type.BLOCK || !(hit instanceof BlockHitResult bhr)) {
+            return null;
+        }
+        var state = level.getBlockState(bhr.getBlockPos());
+        return state.is(Blocks.CHEST) || state.is(Blocks.BARREL) || state.is(Blocks.TRAPPED_CHEST) ? bhr.getBlockPos() : null;
+    }
+
+    // rolls the loot of every container the generator placed again (after you edited a pool)
+    private static int lootRefill(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack src = ctx.getSource();
+        ServerLevel level = src.getServer().getLevel(DIMENSION);
+        if (level == null) {
+            src.sendFailure(Component.literal("meshi:dungeon dimension not found"));
+            return 0;
+        }
+        DungeonData data = DungeonData.get(level);
+        LootStore store = LootStore.get(level);
+        java.util.Random rng = new java.util.Random();
+        int done = 0;
+        java.util.Iterator<java.util.Map.Entry<Long, String>> it = data.lootSpots.entrySet().iterator();
+        while (it.hasNext()) {
+            java.util.Map.Entry<Long, String> e = it.next();
+            if (store.fill(level, BlockPos.of(e.getKey()), e.getValue(), rng)) {
+                done++;
+            } else {
+                it.remove();
+            }
+        }
+        data.setDirty();
+        int total = done;
+        src.sendSuccess(() -> Component.literal("refilled " + total + " chests / barrels from their pools (everything inside was replaced)"), true);
+        return 1;
+    }
+
     // ---- build queue + mushroom upkeep
 
     @SubscribeEvent
     public static void onServerTick(ServerTickEvent.Post event) {
         MinecraftServer server = event.getServer();
+        DungeonMobs.tick(server);
         ServerLevel level = server.getLevel(DIMENSION);
         if (level == null) {
             return;
@@ -243,7 +467,16 @@ public class DungeonEvents {
             }
             return;
         }
-        if (server.getTickCount() % UPKEEP_INTERVAL == 0) {
+        DungeonData data = DungeonData.get(level);
+        if (!data.generated) {
+            return;
+        }
+        int tick = server.getTickCount();
+        if (tick % 5 == 0) {
+            DungeonMobs.sweep(level, data);
+        }
+        DungeonAmbience.tick(level, data);
+        if (tick % UPKEEP_INTERVAL == 0) {
             topUpMushrooms(level);
         }
     }
@@ -293,8 +526,12 @@ public class DungeonEvents {
 
     @SubscribeEvent
     public static void onJoin(EntityJoinLevelEvent event) {
-        if (event.getLevel() instanceof ServerLevel level && isDungeon(level)
-                && event.getEntity() instanceof WalkingMushroomEntity m) {
+        if (!(event.getLevel() instanceof ServerLevel level)) {
+            return;
+        }
+        boolean dungeon = isDungeon(level);
+        DungeonMobs.onJoin(level, event.getEntity(), dungeon);
+        if (dungeon && event.getEntity() instanceof WalkingMushroomEntity m) {
             DungeonData data = DungeonData.get(level);
             if (data.mushrooms.add(m.getUUID())) {
                 data.setDirty();
@@ -302,11 +539,14 @@ public class DungeonEvents {
         }
     }
 
-    // only real removals (dead / discarded) free up a slot, unloading a chunk dosnt
+    // only real removals (dead / discarded) free up a mushroom slot, unloading a chunk dosnt
     @SubscribeEvent
     public static void onLeave(EntityLeaveLevelEvent event) {
-        if (event.getLevel() instanceof ServerLevel level && isDungeon(level)
-                && event.getEntity() instanceof WalkingMushroomEntity m
+        if (!(event.getLevel() instanceof ServerLevel level)) {
+            return;
+        }
+        DungeonMobs.onLeave(event.getEntity());
+        if (isDungeon(level) && event.getEntity() instanceof WalkingMushroomEntity m
                 && m.getRemovalReason() != null && m.getRemovalReason().shouldDestroy()) {
             DungeonData data = DungeonData.get(level);
             if (data.mushrooms.remove(m.getUUID())) {
@@ -333,11 +573,19 @@ public class DungeonEvents {
         EntityType<?> entity = event.getEntity().getType();
         if (entity != EntityType.ZOMBIE && entity != EntityType.SKELETON) {
             event.setSpawnCancelled(true);
+            return;
+        }
+        // cap per floor, less spawning near the top, none in safezones
+        ServerLevel level = event.getLevel().getLevel();
+        if (!DungeonMobs.allowSpawn(level, event.getEntity(), DungeonData.get(level))) {
+            event.setSpawnCancelled(true);
         }
     }
 
     @SubscribeEvent
     public static void onStopping(ServerStoppingEvent event) {
         builder = null;
+        DungeonMobs.clear();
+        DungeonAmbience.clear();
     }
 }

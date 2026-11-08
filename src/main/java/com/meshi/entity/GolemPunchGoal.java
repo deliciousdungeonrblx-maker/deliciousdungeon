@@ -30,7 +30,7 @@ public class GolemPunchGoal extends Goal {
     @Override
     public boolean canUse() {
         LivingEntity target = golem.getTarget();
-        return target != null && target.isAlive() && !golem.isRising();
+        return target != null && target.isAlive() && !golem.isRising() && golem.canChase(target);
     }
 
     @Override

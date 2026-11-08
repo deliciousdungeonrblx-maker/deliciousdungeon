@@ -51,6 +51,7 @@ public class DungeonBuilder {
     private final long seed;
     private final ArrayDeque<Tile> queue = new ArrayDeque<>();
     private final RoomStore store;
+    private final LootStore loot;
     // plot = one tile built on its own for editing, no mobs, no saved data touched
     private final boolean plotMode;
     private boolean useSaved = true;
@@ -73,19 +74,21 @@ public class DungeonBuilder {
         this.seed = seed;
         this.layout = null;
         this.store = RoomStore.get(level);
+        this.loot = LootStore.get(level);
         this.plotMode = true;
     }
 
-    public DungeonBuilder(ServerLevel level, DungeonData data, long seed) {
+    public DungeonBuilder(ServerLevel level, DungeonData data, long seed, int size) {
         this.level = level;
         this.data = data;
         this.seed = seed;
         this.store = RoomStore.get(level);
+        this.loot = LootStore.get(level);
         this.plotMode = false;
-        this.layout = new DungeonLayout(seed);
+        this.layout = new DungeonLayout(seed, size);
         for (int f = 0; f < DungeonLayout.FLOORS; f++) {
-            for (int x = 0; x < DungeonLayout.GRID; x++) {
-                for (int z = 0; z < DungeonLayout.GRID; z++) {
+            for (int x = 0; x < this.layout.grid; x++) {
+                for (int z = 0; z < this.layout.grid; z++) {
                     this.queue.add(this.layout.tiles[f][x][z]);
                 }
             }
@@ -177,13 +180,48 @@ public class DungeonBuilder {
                 ModBlocks.SCORPION_BURROW.get().defaultBlockState().setValue(ScorpionBurrowBlock.FACING, facing));
     }
 
+    // floor index (0 = top) for a world y
+    public static int floorOfY(int y) {
+        int f = Math.floorDiv(TOP_Y + FLOOR_H - 1 - y, FLOOR_H);
+        return Math.max(0, Math.min(DungeonLayout.FLOORS - 1, f));
+    }
+
+    private String defaultPool() {
+        return "floor_" + (this.tile.floor + 1);
+    }
+
+    // fills a placed chest / barrel from a loot pool (the floor one unless you bound it to another)
+    void lootContainer(BlockPos pos, String bound) {
+        if (this.plotMode) {
+            // edit plots keep containers empty, but remember which pool the template wants
+            if (bound != null) {
+                this.store.bindPlot(pos, bound);
+            }
+            return;
+        }
+        String pool = bound != null && this.loot.has(bound) ? bound : defaultPool();
+        this.loot.fill(this.level, pos, pool, this.rng);
+        this.data.lootSpots.put(pos.asLong(), pool);
+    }
+
     void chest(int lx, int lz, Direction facing) {
+        chest(lx, lz, facing, null);
+    }
+
+    void chest(int lx, int lz, Direction facing, String pool) {
         BlockPos pos = world(lx, 1, lz);
         this.level.setBlock(pos, Blocks.CHEST.defaultBlockState().setValue(ChestBlock.FACING, facing), 18);
-        if (this.level.getBlockEntity(pos) instanceof RandomizableContainerBlockEntity c) {
-            c.setLootTable(ResourceKey.create(Registries.LOOT_TABLE, ResourceLocation.withDefaultNamespace("chests/simple_dungeon")));
-            c.setLootTableSeed(this.rng.nextLong());
-        }
+        lootContainer(pos, pool);
+    }
+
+    void barrel(int lx, int lz) {
+        barrel(lx, lz, null);
+    }
+
+    void barrel(int lx, int lz, String pool) {
+        BlockPos pos = world(lx, 1, lz);
+        this.level.setBlock(pos, Blocks.BARREL.defaultBlockState(), 18);
+        lootContainer(pos, pool);
     }
 
     void dispenser(int lx, int rel, int lz, Direction facing) {
@@ -206,7 +244,7 @@ public class DungeonBuilder {
     }
 
     void spot(int lx, int lz) {
-        if (this.data.mushroomSpots.size() < 600) {
+        if (this.data.mushroomSpots.size() < DungeonData.MAX_SPOTS) {
             this.data.mushroomSpots.add(world(lx, 1, lz));
         }
     }
@@ -264,6 +302,10 @@ public class DungeonBuilder {
             case ARROW_GALLERY -> DungeonRooms.arrowGallery(this);
             case SCORPION_ROOM -> DungeonRooms.scorpionRoom(this);
             case ROUND_ROOM -> DungeonRooms.roundRoom(this);
+            case SAFEZONE -> DungeonRooms.safezone(this);
+        }
+        if (t.type == Type.SAFEZONE && !this.plotMode) {
+            this.data.safezones.add(world(0, 0, 0).asLong());
         }
         // lower floor of a stairs tile has the steps in it
         if (t.type == Type.ARRIVAL && t.floor > 0) {
@@ -340,8 +382,15 @@ public class DungeonBuilder {
                 for (int rel = 0; rel < FLOOR_H; rel++) {
                     BlockState s = turnState(room.get(x, rel, z), rotation, steps);
                     setL(p[0], rel, p[1], s);
-                    if (s.is(Blocks.CHEST)) {
-                        lootChest(world(p[0], rel, p[1]));
+                    if (s.is(Blocks.CHEST) || s.is(Blocks.BARREL) || s.is(Blocks.TRAPPED_CHEST)) {
+                        String bound = room.poolAt(x, rel, z);
+                        if (this.plotMode) {
+                            if (bound != null) {
+                                this.store.bindPlot(world(p[0], rel, p[1]), bound);
+                            }
+                        } else {
+                            lootContainer(world(p[0], rel, p[1]), bound);
+                        }
                     } else if (s.is(Blocks.DISPENSER)
                             && this.level.getBlockEntity(world(p[0], rel, p[1])) instanceof DispenserBlockEntity d) {
                         d.setItem(0, new ItemStack(Items.ARROW, 64));
@@ -375,13 +424,6 @@ public class DungeonBuilder {
             if (t.type == Type.HALL && t.plate) {
                 setL(5, 0, 5, ModBlocks.SLIME_TRAP_PLATE.get().defaultBlockState());
             }
-        }
-    }
-
-    private void lootChest(BlockPos pos) {
-        if (this.level.getBlockEntity(pos) instanceof RandomizableContainerBlockEntity c) {
-            c.setLootTable(ResourceKey.create(Registries.LOOT_TABLE, ResourceLocation.withDefaultNamespace("chests/simple_dungeon")));
-            c.setLootTableSeed(this.rng.nextLong());
         }
     }
 
@@ -422,6 +464,7 @@ public class DungeonBuilder {
         else if (key.equals("slime_room")) t.type = Type.SLIME_ROOM;
         else if (key.equals("arrow_gallery")) t.type = Type.ARROW_GALLERY;
         else if (key.equals("scorpion_room")) t.type = Type.SCORPION_ROOM;
+        else if (key.equals("safezone")) t.type = Type.SAFEZONE;
         else t.type = Type.ROUND_ROOM;
         if (key.contains("_") && Character.isDigit(key.charAt(key.length() - 1))) {
             t.variant = key.charAt(key.length() - 1) - '0';
@@ -432,6 +475,7 @@ public class DungeonBuilder {
     // builds the plot for a room (the saved version if there is one, else the generated look)
     public static void buildPlot(ServerLevel level, String key, boolean useSaved) {
         DungeonBuilder b = new DungeonBuilder(level, 12345L);
+        b.store.clearPlotBindings(plotOrigin(key));
         b.useSaved = useSaved;
         b.buildTile(plotTile(key));
     }
@@ -535,6 +579,8 @@ public class DungeonBuilder {
         BlockPos p = world(lx, 1, lz);
         golem.moveTo(p.getX() + 0.5D, p.getY(), p.getZ() + 0.5D, this.rng.nextFloat() * 360.0F, 0.0F);
         golem.setPersistenceRequired();
+        // the golem only fights players that are inside its room (interior cells 1..9, floor to ceiling)
+        golem.setRoom(this.bx + 1, this.yb, this.bz + 1, this.bx + TILE - 1, this.yb + 6, this.bz + TILE - 1);
         golem.finalizeSpawn(this.level, this.level.getCurrentDifficultyAt(p), MobSpawnType.STRUCTURE, null);
         this.level.addFreshEntity(golem);
     }

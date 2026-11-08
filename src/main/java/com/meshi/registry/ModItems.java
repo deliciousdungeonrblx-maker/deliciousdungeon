@@ -45,6 +45,10 @@ public class ModItems {
             ITEMS.register("arrow_trap_plate", () ->
                     new BlockItem(ModBlocks.ARROW_TRAP_PLATE.get(), new Item.Properties()));
 
+    public static final DeferredItem<BlockItem> FIRE_TRAP_PLATE =
+            ITEMS.register("fire_trap_plate", () ->
+                    new BlockItem(ModBlocks.FIRE_TRAP_PLATE.get(), new Item.Properties()));
+
     public static final DeferredItem<GolemSoilItem> GOLEM_SOIL =
             ITEMS.register("golem_soil", () -> new GolemSoilItem(new Item.Properties().stacksTo(16)));
 

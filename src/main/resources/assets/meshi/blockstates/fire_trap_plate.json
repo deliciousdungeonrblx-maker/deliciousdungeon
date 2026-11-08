@@ -1,0 +1,6 @@
+{
+  "variants": {
+    "lit=false": { "model": "minecraft:block/mud_bricks" },
+    "lit=true": { "model": "minecraft:block/magma_block" }
+  }
+}
