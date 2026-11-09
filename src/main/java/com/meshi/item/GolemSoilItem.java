@@ -34,9 +34,15 @@ public class GolemSoilItem extends Item {
     }
 
     public static ItemStack create(List<GolemCrop> crops, long growTicks) {
+        return create(crops, growTicks, null, false);
+    }
+
+    // name = the golems custom name (null if it has none), kept so it comes back when the mound is placed
+    public static ItemStack create(List<GolemCrop> crops, long growTicks, Component name, boolean nameVisible) {
         ItemStack stack = new ItemStack(ModItems.GOLEM_SOIL.get());
         boolean customTime = growTicks != SoilMoundEntity.GROW_TICKS;
-        if (!crops.isEmpty() || customTime) {
+        String nameText = name != null ? name.getString() : "";
+        if (!crops.isEmpty() || customTime || !nameText.isEmpty()) {
             List<GolemCrop> copy = new ArrayList<>(crops);
             CustomData.update(DataComponents.CUSTOM_DATA, stack, tag -> {
                 if (!copy.isEmpty()) {
@@ -45,14 +51,23 @@ public class GolemSoilItem extends Item {
                 if (customTime) {
                     tag.putLong("GrowTicks", growTicks);
                 }
+                if (!nameText.isEmpty()) {
+                    tag.putString("GolemName", nameText);
+                    tag.putBoolean("GolemNameVisible", nameVisible);
+                }
             });
         }
         return stack;
     }
 
+    public static String golemNameOf(ItemStack stack) {
+        return dataOf(stack).getString("GolemName");
+    }
+
     public static long growTicksOf(ItemStack stack) {
         CompoundTag tag = dataOf(stack);
         long ticks = tag.contains("GrowTicks") ? tag.getLong("GrowTicks") : SoilMoundEntity.GROW_TICKS;
+        // old items w/ the 1 day time get fixed by the mounds setGrowTicks
         return ticks > 0 ? ticks : SoilMoundEntity.GROW_TICKS;
     }
 
@@ -92,6 +107,11 @@ public class GolemSoilItem extends Item {
         List<GolemCrop> crops = cropsOf(stack);
         mound.setCrops(crops);
         mound.setGrowTicks(growTicksOf(stack));
+        CompoundTag data = dataOf(stack);
+        if (!data.getString("GolemName").isEmpty()) {
+            mound.setCustomName(Component.literal(data.getString("GolemName")));
+            mound.setGolemNameVisible(data.getBoolean("GolemNameVisible"));
+        }
         mound.startTimer(server.getGameTime());
         server.addFreshEntity(mound);
 
@@ -130,6 +150,10 @@ public class GolemSoilItem extends Item {
             tooltip.add(Component.literal("Seeds: " + crops.size() + "/" + SoilMoundEntity.MAX_SEEDS).withStyle(ChatFormatting.GRAY));
         } else {
             tooltip.add(Component.literal("No seeds planted").withStyle(ChatFormatting.DARK_GRAY));
+        }
+        String golemName = golemNameOf(stack);
+        if (!golemName.isEmpty()) {
+            tooltip.add(Component.literal("Golem: " + golemName).withStyle(ChatFormatting.YELLOW));
         }
     }
 }

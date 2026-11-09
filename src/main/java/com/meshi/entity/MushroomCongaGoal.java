@@ -22,7 +22,8 @@ public class MushroomCongaGoal extends Goal {
 
     @Override
     public boolean canUse() {
-        if (mushroom.isBusy() || mushroom.getTarget() != null || mushroom.getRandom().nextInt(40) != 0) {
+        // pets follow their owner instead
+        if (mushroom.isTamed() || mushroom.isBusy() || mushroom.getTarget() != null || mushroom.getRandom().nextInt(40) != 0) {
             return false;
         }
         List<WalkingMushroomEntity> others = mushroom.level().getEntitiesOfClass(WalkingMushroomEntity.class,

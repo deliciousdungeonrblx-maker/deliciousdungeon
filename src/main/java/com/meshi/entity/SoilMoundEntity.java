@@ -29,14 +29,19 @@ import software.bernie.geckolib.util.GeckoLibUtil;
 
 // soil mound, acts like decoration not a mob: nothing can hurt or target it, never moves
 // right click w/ plantable item = add seed (max 4, any mix), empty hand = pick up as golem soil
-// 24000 ticks (1 day) after placing it rises as a golem. sparkles while growing, ground trembles in the last 30s
+// 2400 ticks (2 min) after placing it rises as a golem. sparkles while growing, ground trembles in the last 30s
+// the golems custom name is kept here while its a mound n handed back when it hatches
 // test: /summon meshi:soil_mound ~ ~ ~ {Crops:["cabbage","tomato"],GrowTicks:200}
 public class SoilMoundEntity extends Entity implements GeoEntity {
     public static final int MAX_SEEDS = 4;
-    public static final long GROW_TICKS = 24000L;
+    public static final long GROW_TICKS = 2400L;
+    // the old 1 day default, old saves w/ this get the new time
+    private static final long OLD_GROW_TICKS = 24000L;
 
-    // only the seed count is synced (texture depends on it)
+    // seed count (texture depends on it) + seconds left (clock label above the mound), -1 = not known yet
     private static final EntityDataAccessor<Integer> SEEDS =
+            SynchedEntityData.defineId(SoilMoundEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Integer> TIMER_SECONDS =
             SynchedEntityData.defineId(SoilMoundEntity.class, EntityDataSerializers.INT);
 
     private final AnimatableInstanceCache cache = GeckoLibUtil.createInstanceCache(this);
@@ -47,6 +52,8 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
     private long readyAt = -1L;
     // grow time, GrowTicks tag changes it (gets passed to the golem n back)
     private long growTicks = GROW_TICKS;
+    // name tag on the golem (the mounds own name tag is never shown, the renderer draws it in the label)
+    private boolean golemNameVisible = false;
 
     public SoilMoundEntity(EntityType<? extends SoilMoundEntity> type, Level level) {
         super(type, level);
@@ -76,16 +83,43 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
     }
 
     public void setGrowTicks(long ticks) {
-        this.growTicks = ticks > 0 ? ticks : GROW_TICKS;
+        this.growTicks = ticks > 0 && ticks != OLD_GROW_TICKS ? ticks : GROW_TICKS;
     }
 
     public void startTimer(long gameTime) {
         this.readyAt = gameTime + this.growTicks;
     }
 
+    public int getTimerSeconds() {
+        return this.entityData.get(TIMER_SECONDS);
+    }
+
+    // golem name carry over: golem -> mound
+    public void copyNameFrom(Entity golem) {
+        this.setCustomName(golem.getCustomName());
+        this.golemNameVisible = golem.isCustomNameVisible();
+    }
+
+    // mound -> golem
+    public void applyNameTo(Entity golem) {
+        if (this.hasCustomName()) {
+            golem.setCustomName(this.getCustomName());
+            golem.setCustomNameVisible(this.golemNameVisible);
+        }
+    }
+
+    public boolean isGolemNameVisible() {
+        return this.golemNameVisible;
+    }
+
+    public void setGolemNameVisible(boolean visible) {
+        this.golemNameVisible = visible;
+    }
+
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(SEEDS, 0);
+        builder.define(TIMER_SECONDS, -1);
     }
 
     @Override
@@ -97,12 +131,14 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
         if (tag.contains("GrowTicks")) {
             setGrowTicks(tag.getLong("GrowTicks"));
         }
+        this.golemNameVisible = tag.getBoolean("GolemNameVisible");
     }
 
     @Override
     protected void addAdditionalSaveData(CompoundTag tag) {
         GolemCrop.writeList(tag, this.planted);
         tag.putLong("GrowTicks", this.growTicks);
+        tag.putBoolean("GolemNameVisible", this.golemNameVisible);
         if (this.readyAt >= 0) {
             tag.putLong("ReadyAt", this.readyAt);
         }
@@ -182,7 +218,7 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
 
     private InteractionResult pickUp(Player player) {
         if (this.level() instanceof ServerLevel server) {
-            ItemStack stack = GolemSoilItem.create(this.planted, this.growTicks);
+            ItemStack stack = GolemSoilItem.create(this.planted, this.growTicks, getCustomName(), this.golemNameVisible);
             if (!player.addItem(stack)) {
                 player.drop(stack, false);
             }
@@ -206,9 +242,11 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
             return;
         }
         long now = server.getGameTime();
-        if (this.readyAt < 0) {
+        if (this.readyAt < 0 || this.readyAt - now > this.growTicks) {
+            // not started, or an old 1 day mound: cap it to the current time
             this.readyAt = now + this.growTicks;
         }
+        this.entityData.set(TIMER_SECONDS, (int) Math.max(0L, (this.readyAt - now + 19L) / 20L));
         // block under it gone = pops off as an item
         if (this.tickCount % 10 == 0 && !hasSupport()) {
             popOff(server);
@@ -270,7 +308,7 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
     }
 
     private void popOff(ServerLevel server) {
-        ItemStack stack = GolemSoilItem.create(this.planted, this.growTicks);
+        ItemStack stack = GolemSoilItem.create(this.planted, this.growTicks, getCustomName(), this.golemNameVisible);
         server.addFreshEntity(new ItemEntity(server, getX(), getY() + 0.3D, getZ(), stack));
         this.discard();
     }
@@ -294,6 +332,7 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
         }
         golem.setSoil(this.planted);
         golem.setGrowTicks(this.growTicks);
+        applyNameTo(golem);
         golem.startRising();
         golem.setPersistenceRequired();
         server.addFreshEntity(golem);

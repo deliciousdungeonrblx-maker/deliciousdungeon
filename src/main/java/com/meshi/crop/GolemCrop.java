@@ -19,8 +19,8 @@ public enum GolemCrop {
     ONION("onion", "farmersdelight:onion", "farmersdelight:onion", "Onion"),
     CARROT("carrot", "minecraft:carrot", "minecraft:carrot", "Carrot");
 
-    // crops dropped per seed
-    public static final int CROPS_PER_SEED = 2;
+    // crops dropped per seed (4 seeds = 16 crops)
+    public static final int CROPS_PER_SEED = 4;
 
     private final String id;
     private final ResourceLocation plantItem;

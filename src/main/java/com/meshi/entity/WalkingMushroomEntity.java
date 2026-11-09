@@ -5,6 +5,7 @@ import com.meshi.registry.ModSounds;
 import com.meshi.util.Fx;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ItemParticleOption;
 import net.minecraft.core.particles.ParticleTypes;
@@ -20,6 +21,8 @@ import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.tags.TagKey;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
@@ -60,6 +63,8 @@ import software.bernie.geckolib.util.GeckoLibUtil;
 // anything else just goes boing: half a heart max, it never dies from those
 // stick hit = knocked out 15s (floating z's), another stick hit resets teh timer, any other hit wakes it
 // extras: disguise (pops up at 4 blocks, 2 if sneaking), conga, pack alarm, snacks (MushroomSnackGoal), trips while chasing, headbutt (MushroomBonkGoal)
+// feed it a red mushroom to tame it (1 in 3 per mushroom): pet follows the owner, never attacks them, owner cant hurt it (stick nap still works)
+// lead works on any mushroom (right click w/ a lead)
 // drops mush corpse (loot_table/entities/walking_mushroom.json)
 // test: /summon meshi:walking_mushroom ~ ~ ~ {Disguised:1b}
 public class WalkingMushroomEntity extends Monster implements GeoEntity {
@@ -80,6 +85,8 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
     private static final int WAKE_HOLD = 14;
     private static final int HAPPY_HOLD = 14;
     private static final int SNACK_COOLDOWN = 20 * 30;
+    // 1 in this many red mushrooms tames it
+    private static final int TAME_ODDS = 3;
 
     // swords axes n knives (FD knives are c:tools/knife)
     private static final List<TagKey<Item>> BLADE_TAGS = List.of(
@@ -111,6 +118,8 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
     private int alarmCooldown = 0;
     private int hintCooldown = 0;
     private int calmTicks = 0;
+    // owner after taming, null = wild
+    private UUID ownerId = null;
 
     public WalkingMushroomEntity(EntityType<? extends WalkingMushroomEntity> type, Level level) {
         super(type, level);
@@ -156,13 +165,93 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
         this.goalSelector.addGoal(1, new FloatGoal(this));
         this.goalSelector.addGoal(2, new MushroomSnackGoal(this));
         this.goalSelector.addGoal(3, new MushroomBonkGoal(this, 1.0D));
-        this.goalSelector.addGoal(4, new MushroomCongaGoal(this));
-        this.goalSelector.addGoal(5, new WaterAvoidingRandomStrollGoal(this, 0.6D));
-        this.goalSelector.addGoal(6, new LookAtPlayerGoal(this, Player.class, 8.0F));
-        this.goalSelector.addGoal(7, new RandomLookAroundGoal(this));
+        this.goalSelector.addGoal(4, new MushroomFollowOwnerGoal(this, 1.1D));
+        this.goalSelector.addGoal(5, new MushroomCongaGoal(this));
+        this.goalSelector.addGoal(6, new WaterAvoidingRandomStrollGoal(this, 0.6D));
+        this.goalSelector.addGoal(7, new LookAtPlayerGoal(this, Player.class, 8.0F));
+        this.goalSelector.addGoal(8, new RandomLookAroundGoal(this));
 
         this.targetSelector.addGoal(1, new HurtByTargetGoal(this));
-        this.targetSelector.addGoal(2, new NearestAttackableTargetGoal<>(this, Player.class, true));
+        // pets dont go after players on their own
+        this.targetSelector.addGoal(2, new NearestAttackableTargetGoal<>(this, Player.class, 10, true, false,
+                e -> !this.isTamed()));
+    }
+
+    // ---- taming + lead
+
+    public boolean isTamed() {
+        return this.ownerId != null;
+    }
+
+    public boolean isOwner(Entity entity) {
+        return this.ownerId != null && entity != null && this.ownerId.equals(entity.getUUID());
+    }
+
+    public Player getOwnerPlayer() {
+        return this.ownerId == null ? null : this.level().getPlayerByUUID(this.ownerId);
+    }
+
+    @Override
+    protected InteractionResult mobInteract(Player player, InteractionHand hand) {
+        ItemStack held = player.getItemInHand(hand);
+        boolean client = this.level().isClientSide;
+
+        // hostile mobs cant normally be leashed so we do it here
+        if (held.is(Items.LEAD) && !isLeashed()) {
+            if (!client) {
+                this.setLeashedTo(player, true);
+                if (!player.getAbilities().instabuild) {
+                    held.shrink(1);
+                }
+                this.playSound(SoundEvents.LEASH_KNOT_PLACE, 1.0F, 1.0F);
+            }
+            return InteractionResult.sidedSuccess(client);
+        }
+
+        if (held.is(Items.RED_MUSHROOM)) {
+            if (isTamed() && getHealth() >= getMaxHealth()) {
+                return InteractionResult.PASS;
+            }
+            if (client || !(this.level() instanceof ServerLevel server)) {
+                return InteractionResult.sidedSuccess(true);
+            }
+            if (isTamed()) {
+                // pet eats it to heal
+                if (!player.getAbilities().instabuild) {
+                    held.shrink(1);
+                }
+                finishSnack();
+                return InteractionResult.sidedSuccess(false);
+            }
+            if (!player.getAbilities().instabuild) {
+                held.shrink(1);
+            }
+            chew(new ItemStack(Items.RED_MUSHROOM));
+            if (isDisguised()) {
+                setDisguised(false);
+            }
+            if (this.random.nextInt(TAME_ODDS) == 0) {
+                tame(server, player);
+            } else {
+                server.sendParticles(ParticleTypes.SMOKE, getX(), getY() + 0.9D, getZ(), 6, 0.25D, 0.15D, 0.25D, 0.02D);
+                sfx(server, ModSounds.MUSHROOM_SQUEAK, 0.6F, 1.3F);
+            }
+            return InteractionResult.sidedSuccess(false);
+        }
+        return super.mobInteract(player, hand);
+    }
+
+    private void tame(ServerLevel server, Player owner) {
+        this.ownerId = owner.getUUID();
+        setTarget(null);
+        setAggressive(false);
+        setPersistenceRequired();
+        this.holdTicks = HAPPY_HOLD;
+        this.getNavigation().stop();
+        triggerAnim("action", "happy_hop");
+        sfx(server, ModSounds.MUSHROOM_HAPPY, 1.0F, 1.0F);
+        server.sendParticles(ParticleTypes.HEART, getX(), getY() + 1.1D, getZ(), 7, 0.3D, 0.2D, 0.3D, 0.0D);
+        server.sendParticles(ParticleTypes.NOTE, getX(), getY() + 1.3D, getZ(), 2, 0.3D, 0.1D, 0.3D, 1.0D);
     }
 
 
@@ -199,7 +288,7 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
 
     @Override
     public void setTarget(LivingEntity target) {
-        if (target != null && (isDisguised() || isKnockedOut())) {
+        if (target != null && (isDisguised() || isKnockedOut() || isOwner(target))) {
             return;
         }
         super.setTarget(target);
@@ -303,6 +392,9 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
 
 
     public void disguise(ServerLevel server) {
+        if (isTamed()) {
+            return;  // pets dont hide
+        }
         setDisguised(true);
         setTarget(null);
         setAggressive(false);
@@ -394,7 +486,7 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
     }
 
     private void hearAlarm(LivingEntity cause) {
-        if (isKnockedOut() || !(this.level() instanceof ServerLevel server)) {
+        if (isTamed() || isKnockedOut() || !(this.level() instanceof ServerLevel server)) {
             return;
         }
         this.alarmCooldown = 40;
@@ -494,6 +586,10 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
             LivingEntity hitter = (LivingEntity) attacker;
             ItemStack weapon = hitter.getMainHandItem();
 
+            // owner cant hurt their pet (a stick nap is still ok)
+            if (isOwner(hitter) && !weapon.is(Items.STICK)) {
+                return false;
+            }
             // stick bonk = knocked out, no dmg
             if (hitter instanceof Player && weapon.is(Items.STICK)) {
                 knockOut(server, hitter);
@@ -583,6 +679,9 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
         super.addAdditionalSaveData(tag);
         tag.putBoolean("Disguised", isDisguised());
         tag.putInt("KnockoutTicks", isKnockedOut() ? this.knockoutTicks : 0);
+        if (this.ownerId != null) {
+            tag.putUUID("MushroomOwner", this.ownerId);
+        }
     }
 
     @Override
@@ -591,6 +690,7 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
         this.knockoutTicks = tag.getInt("KnockoutTicks");
         setKnockedOut(this.knockoutTicks > 0);
         setDisguised(tag.getBoolean("Disguised") && this.knockoutTicks <= 0);
+        this.ownerId = tag.hasUUID("MushroomOwner") ? tag.getUUID("MushroomOwner") : null;
     }
 
 

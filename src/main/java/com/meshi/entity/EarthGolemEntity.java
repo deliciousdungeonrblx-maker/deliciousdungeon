@@ -49,8 +49,9 @@ import software.bernie.geckolib.util.GeckoLibUtil;
 
 // earth golem, slow heavy hostile w/ an iron golem style punch
 // HasCrops = texture (true = crops on its back). RiseTicks > 0 = plays rise anim n stays put (the mound sets it)
-// Seeds/Crop = what was planted, drops 2 crops per seed on death then leaves a fresh empty mound
-// GrowTicks = how long that mound takes to rise again (24000 = 1 day)
+// Seeds/Crop = what was planted, drops 4 crops per seed on death then leaves a fresh empty mound
+// GrowTicks = how long that mound takes to rise again (2400 = 2 min)
+// custom name goes golem -> mound -> golem again (n through the soil item too)
 // test: /summon meshi:earth_golem ~ ~ ~ {RiseTicks:40}
 public class EarthGolemEntity extends Monster implements GeoEntity {
     private static final EntityDataAccessor<Boolean> HAS_CROPS =
@@ -325,7 +326,7 @@ public class EarthGolemEntity extends Monster implements GeoEntity {
         }
     }
 
-    // every seed gives back its own crop (2 per seed), same crops get stacked, each stack pops out w/ its own sparkle
+    // every seed gives back its own crop (4 per seed), same crops get stacked, each stack pops out w/ its own sparkle
     private void finishDeath(ServerLevel server) {
         Map<Item, Integer> totals = new LinkedHashMap<>();
         for (GolemCrop crop : this.crops) {
@@ -356,6 +357,7 @@ public class EarthGolemEntity extends Monster implements GeoEntity {
             mound.setYRot(yaw);
             mound.yRotO = yaw;
             mound.setGrowTicks(this.growTicks);
+            mound.copyNameFrom(this);
             mound.startTimer(server.getGameTime());
             server.addFreshEntity(mound);
         }
