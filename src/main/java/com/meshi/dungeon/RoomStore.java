@@ -32,26 +32,31 @@ public class RoomStore extends SavedData {
             "dead_end_0", "dead_end_1", "dead_end_2", "dead_end_3",
             "golem", "slime_room", "arrow_gallery", "scorpion_room", "round_room",
             // NEW ONES GO AT THE END ONLY. the plot position of a room is its index in this list
-            "safezone");
+            "safezone", "side_room", "special_room",
+            // the 2x2 trap rooms, saved as one 22 x 8 x 22 grid each
+            "big_slime", "big_arrow", "big_scorpion", "big_round");
 
     public static final class Room {
         final List<BlockState> palette;
         final int[] cells;
         // cell index -> loot pool name, for chests / barrels you bound to a pool
         final Map<Integer, String> pools;
+        // blocks wide and deep (11, or 22 for the big trap rooms)
+        final int size;
 
-        Room(List<BlockState> palette, int[] cells, Map<Integer, String> pools) {
+        Room(List<BlockState> palette, int[] cells, Map<Integer, String> pools, int size) {
             this.palette = palette;
             this.cells = cells;
             this.pools = pools;
+            this.size = size;
         }
 
         String poolAt(int x, int rel, int z) {
-            return this.pools.get((x * DungeonBuilder.FLOOR_H + rel) * DungeonBuilder.TILE + z);
+            return this.pools.get((x * DungeonBuilder.FLOOR_H + rel) * this.size + z);
         }
 
         BlockState get(int x, int rel, int z) {
-            return this.palette.get(this.cells[(x * DungeonBuilder.FLOOR_H + rel) * DungeonBuilder.TILE + z]);
+            return this.palette.get(this.cells[(x * DungeonBuilder.FLOOR_H + rel) * this.size + z]);
         }
     }
 
@@ -77,12 +82,36 @@ public class RoomStore extends SavedData {
         if (type == Type.SCORPION_ROOM) return "scorpion_room";
         if (type == Type.ROUND_ROOM) return "round_room";
         if (type == Type.SAFEZONE) return "safezone";
+        if (type == Type.SIDE_ROOM) return "side_room";
+        if (type == Type.SPECIAL) return "special_room";
+        if (type == Type.TRAP_PART) {
+            return switch (t.kind) {
+                case SLIME_ROOM -> "big_slime";
+                case ARROW_GALLERY -> "big_arrow";
+                case SCORPION_ROOM -> "big_scorpion";
+                default -> "big_round";
+            };
+        }
         return null;
     }
 
     // one entrance rooms are saved with the door on the north side and get turned to fit
     public static boolean singleEntrance(String key) {
-        return key.equals("golem") || key.startsWith("dead_end");
+        return key.equals("golem") || key.startsWith("dead_end") || key.equals("side_room") || key.equals("special_room");
+    }
+
+    public static boolean isBig(String key) {
+        return key.startsWith("big_");
+    }
+
+    // width / depth of a saved room in blocks
+    public static int sizeOf(String key) {
+        return isBig(key) ? 2 * DungeonBuilder.TILE : DungeonBuilder.TILE;
+    }
+
+    // the 4 old single cell trap rooms are not generated any more, their saves just stay in the world data
+    public static boolean unused(String key) {
+        return key.equals("slime_room") || key.equals("arrow_gallery") || key.equals("scorpion_room") || key.equals("round_room");
     }
 
     public boolean has(String key) {
@@ -127,11 +156,11 @@ public class RoomStore extends SavedData {
     }
 
     // forget the bindings of one plot (before it is rebuilt)
-    public void clearPlotBindings(BlockPos origin) {
+    public void clearPlotBindings(BlockPos origin, int size) {
         this.plotPools.keySet().removeIf(l -> {
             BlockPos p = BlockPos.of(l);
-            return p.getX() >= origin.getX() && p.getX() < origin.getX() + DungeonBuilder.TILE
-                    && p.getZ() >= origin.getZ() && p.getZ() < origin.getZ() + DungeonBuilder.TILE;
+            return p.getX() >= origin.getX() && p.getX() < origin.getX() + size
+                    && p.getZ() >= origin.getZ() && p.getZ() < origin.getZ() + size;
         });
         setDirty();
     }
@@ -140,10 +169,11 @@ public class RoomStore extends SavedData {
     public void capture(String key, ServerLevel level, BlockPos origin) {
         List<BlockState> palette = new ArrayList<>();
         Map<BlockState, Integer> index = new HashMap<>();
-        int[] cells = new int[DungeonBuilder.TILE * DungeonBuilder.FLOOR_H * DungeonBuilder.TILE];
-        for (int x = 0; x < DungeonBuilder.TILE; x++) {
+        int size = sizeOf(key);
+        int[] cells = new int[size * DungeonBuilder.FLOOR_H * size];
+        for (int x = 0; x < size; x++) {
             for (int rel = 0; rel < DungeonBuilder.FLOOR_H; rel++) {
-                for (int z = 0; z < DungeonBuilder.TILE; z++) {
+                for (int z = 0; z < size; z++) {
                     BlockState s = level.getBlockState(origin.offset(x, rel, z));
                     Integer i = index.get(s);
                     if (i == null) {
@@ -151,24 +181,24 @@ public class RoomStore extends SavedData {
                         palette.add(s);
                         index.put(s, i);
                     }
-                    cells[(x * DungeonBuilder.FLOOR_H + rel) * DungeonBuilder.TILE + z] = i;
+                    cells[(x * DungeonBuilder.FLOOR_H + rel) * size + z] = i;
                 }
             }
         }
         Map<Integer, String> pools = new HashMap<>();
-        for (int x = 0; x < DungeonBuilder.TILE; x++) {
+        for (int x = 0; x < size; x++) {
             for (int rel = 0; rel < DungeonBuilder.FLOOR_H; rel++) {
-                for (int z = 0; z < DungeonBuilder.TILE; z++) {
+                for (int z = 0; z < size; z++) {
                     String pool = this.plotPools.get(origin.offset(x, rel, z).asLong());
-                    BlockState here = palette.get(cells[(x * DungeonBuilder.FLOOR_H + rel) * DungeonBuilder.TILE + z]);
+                    BlockState here = palette.get(cells[(x * DungeonBuilder.FLOOR_H + rel) * size + z]);
                     boolean container = here.is(Blocks.CHEST) || here.is(Blocks.BARREL) || here.is(Blocks.TRAPPED_CHEST);
                     if (pool != null && container) {
-                        pools.put((x * DungeonBuilder.FLOOR_H + rel) * DungeonBuilder.TILE + z, pool);
+                        pools.put((x * DungeonBuilder.FLOOR_H + rel) * size + z, pool);
                     }
                 }
             }
         }
-        this.rooms.put(key, new Room(palette, cells, pools));
+        this.rooms.put(key, new Room(palette, cells, pools, size));
         setDirty();
     }
 
@@ -182,7 +212,8 @@ public class RoomStore extends SavedData {
                 palette.add(NbtUtils.readBlockState(provider.lookupOrThrow(Registries.BLOCK), (CompoundTag) t));
             }
             int[] cells = r.getIntArray("Cells");
-            if (palette.isEmpty() || cells.length != DungeonBuilder.TILE * DungeonBuilder.FLOOR_H * DungeonBuilder.TILE) {
+            int size = sizeOf(key);
+            if (palette.isEmpty() || cells.length != size * DungeonBuilder.FLOOR_H * size) {
                 continue;
             }
             Map<Integer, String> pools = new HashMap<>();
@@ -190,7 +221,7 @@ public class RoomStore extends SavedData {
                 CompoundTag pc = (CompoundTag) t;
                 pools.put(pc.getInt("Cell"), pc.getString("Pool"));
             }
-            store.rooms.put(key, new Room(palette, cells, pools));
+            store.rooms.put(key, new Room(palette, cells, pools, size));
         }
         CompoundTag pp = tag.getCompound("PlotPools");
         for (String k : pp.getAllKeys()) {

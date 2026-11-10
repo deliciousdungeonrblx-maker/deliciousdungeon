@@ -198,7 +198,8 @@ public class DungeonEvents {
         RoomStore store = RoomStore.get(level);
         StringBuilder sb = new StringBuilder("rooms (* = you edited it):");
         for (String key : RoomStore.KEYS) {
-            sb.append("\n ").append(store.has(key) ? "* " : "  ").append(key);
+            sb.append("\n ").append(store.has(key) ? "* " : "  ").append(key)
+                    .append(RoomStore.unused(key) ? " (old, not generated any more)" : "");
         }
         ctx.getSource().sendSuccess(() -> Component.literal(sb.toString()), false);
         return 1;
@@ -224,7 +225,9 @@ public class DungeonEvents {
         }
         BlockPos at = DungeonBuilder.plotSpawn(key);
         player.teleportTo(level, at.getX() + 0.5D, at.getY(), at.getZ() + 0.5D, 0.0F, 0.0F);
-        String doors = RoomStore.singleEntrance(key)
+        String doors = RoomStore.isBig(key)
+                ? "this room is 22x22 (2x2 cells) with 2 doorways on every side. keep all 8 open, the generator walls up the 4 it doesnt need."
+                : RoomStore.singleEntrance(key)
                 ? "this room has ONE entrance, keep it on the north side."
                 : "keep all 4 doorways open, the generator walls up the ones it doesnt need.";
         src.sendSuccess(() -> Component.literal("editing " + key + ". " + doors
