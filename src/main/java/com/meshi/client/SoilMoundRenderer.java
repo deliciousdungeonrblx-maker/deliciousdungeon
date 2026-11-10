@@ -58,11 +58,14 @@ public class SoilMoundRenderer extends GeoEntityRenderer<SoilMoundEntity> {
         poseStack.pushPose();
         poseStack.translate(0.0D, y, 0.0D);
         poseStack.mulPose(this.entityRenderDispatcher.cameraOrientation());
-        poseStack.scale(-0.025F, -0.025F, 0.025F);
+        poseStack.scale(-0.03F, -0.03F, 0.03F);
         Matrix4f matrix = poseStack.last().pose();
         float x = -font.width(text) / 2.0F;
-        font.drawInBatch(text, x, 0.0F, 0xFFFFFFFF, false, matrix, bufferSource, Font.DisplayMode.NORMAL,
+        // same 2 passes as vanilla nametags: see-through first so nothing hides it, then the normal one on top
+        font.drawInBatch(text, x, 0.0F, 0x20FFFFFF, false, matrix, bufferSource, Font.DisplayMode.SEE_THROUGH,
                 0x40000000, FULL_BRIGHT);
+        font.drawInBatch(text, x, 0.0F, 0xFFFFFFFF, false, matrix, bufferSource, Font.DisplayMode.NORMAL,
+                0, FULL_BRIGHT);
         poseStack.popPose();
     }
 }
