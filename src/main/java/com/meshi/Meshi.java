@@ -30,6 +30,7 @@ public class Meshi {
         ModParticles.PARTICLE_TYPES.register(modEventBus);
 
         NeoForge.EVENT_BUS.register(DungeonEvents.class);
+        NeoForge.EVENT_BUS.register(com.meshi.forest.ForestEvents.class);
 
         modEventBus.addListener(this::registerAttributes);
         modEventBus.addListener(this::addCreativeTabItems);

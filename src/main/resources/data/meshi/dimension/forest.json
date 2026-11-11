@@ -1,0 +1,13 @@
+{
+  "type": "meshi:forest",
+  "generator": {
+    "type": "minecraft:flat",
+    "settings": {
+      "biome": "meshi:forest",
+      "features": false,
+      "lakes": false,
+      "layers": [],
+      "structure_overrides": []
+    }
+  }
+}
