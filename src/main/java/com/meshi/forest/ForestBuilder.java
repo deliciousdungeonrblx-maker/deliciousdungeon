@@ -1,131 +1,156 @@
 package com.meshi.forest;
 
-import com.meshi.forest.ForestGen.Mat;
-import java.util.EnumMap;
-import java.util.Map;
+import com.meshi.forest.ForestDefs.Def;
+import com.meshi.forest.ForestDefs.Door;
+import com.meshi.forest.ForestPlan.Placement;
+import java.util.List;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.LeavesBlock;
+import net.minecraft.world.level.block.CrossCollisionBlock;
+import net.minecraft.world.level.block.Rotation;
+import net.minecraft.world.level.block.WallBlock;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 
-// places the generated forest a few thousand blocks per tick (clears the old one first when regenerating)
+// one build job: first clears some boxes, then stamps parts (saved version or generated look, turned to fit).
+// works on a time budget per tick so a huge map doesnt freeze the server. jobs run one after another (ForestEvents)
 public final class ForestBuilder {
     private static final int FLAGS = Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE;
     private static final int CLEAR_FLAGS = FLAGS | Block.UPDATE_SUPPRESS_DROPS;
+    private static final long BUDGET_NANOS = 30_000_000L;
+    private static final Rotation[] ROT = {Rotation.NONE, Rotation.CLOCKWISE_90, Rotation.CLOCKWISE_180, Rotation.COUNTERCLOCKWISE_90};
 
     private final ServerLevel level;
-    private final ForestGen gen;
-    private final long[] clearKeys;
-    private final long[] keys;
-    private final Map<Mat, BlockState> states = new EnumMap<>(Mat.class);
-    private final int perTick;
-    private int ci = 0;
-    private int ki = 0;
+    private final PartStore store;
+    private final List<int[]> clearBoxes;
+    private final List<Placement> stamps;
+    private final boolean useSaved;
+    public final Runnable onDone;
     private final BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
 
-    public ForestBuilder(ServerLevel level, ForestGen clearGen, ForestGen gen, ForestSettings s) {
+    private int ci = 0;
+    private long cc = 0;
+    private int si = 0;
+    private long cell = 0;
+    private ForestStamp.Source cur = null;
+
+    public ForestBuilder(ServerLevel level, List<int[]> clearBoxes, List<Placement> stamps, boolean useSaved, Runnable onDone) {
         this.level = level;
-        this.gen = gen;
-        this.clearKeys = clearGen == null ? new long[0] : clearGen.sortedKeys();
-        this.keys = gen.sortedKeys();
-        this.perTick = Math.max(500, Math.min(100000, s.getInt("blocks_per_tick")));
-        fill(s);
+        this.store = PartStore.get(level);
+        this.clearBoxes = clearBoxes;
+        this.stamps = stamps;
+        this.useSaved = useSaved;
+        this.onDone = onDone;
     }
 
-    public int remaining() {
-        return (this.clearKeys.length - this.ci) + (this.keys.length - this.ki);
+    public int remainingParts() {
+        return this.stamps.size() - this.si;
     }
 
-    public int total() {
-        return this.clearKeys.length + this.keys.length;
+    public int totalParts() {
+        return this.stamps.size();
+    }
+
+    public int remainingBoxes() {
+        return this.clearBoxes.size() - this.ci;
     }
 
     // true when finished
     public boolean tick() {
-        int budget = this.perTick;
-        while (budget > 0 && this.ci < this.clearKeys.length) {
-            long k = this.clearKeys[this.ci++];
-            this.pos.set(ForestGen.ux(k), ForestGen.uy(k), ForestGen.uz(k));
-            if (!this.level.getBlockState(this.pos).isAir()) {
-                this.level.setBlock(this.pos, Blocks.AIR.defaultBlockState(), CLEAR_FLAGS);
+        long end = System.nanoTime() + BUDGET_NANOS;
+        int ops = 0;
+        while (this.ci < this.clearBoxes.size()) {
+            int[] b = this.clearBoxes.get(this.ci);
+            long h = b[4] - b[1] + 1, d = b[5] - b[2] + 1;
+            long total = (b[3] - b[0] + 1) * h * d;
+            while (this.cc < total) {
+                long i = this.cc++;
+                int x = b[0] + (int) (i / (h * d));
+                long rem = i % (h * d);
+                this.pos.set(x, b[1] + (int) (rem / d), b[2] + (int) (rem % d));
+                if (!this.level.getBlockState(this.pos).isAir()) {
+                    this.level.setBlock(this.pos, Blocks.AIR.defaultBlockState(), CLEAR_FLAGS);
+                }
+                if ((++ops & 1023) == 0 && System.nanoTime() > end) {
+                    return false;
+                }
             }
-            budget--;
+            this.ci++;
+            this.cc = 0;
         }
-        while (budget > 0 && this.ci >= this.clearKeys.length && this.ki < this.keys.length) {
-            long k = this.keys[this.ki++];
-            Mat m = this.gen.at(k);
-            if (m == null || m == Mat.AIR) {
-                continue;
+        while (this.si < this.stamps.size()) {
+            Placement p = this.stamps.get(this.si);
+            Def def = p.def;
+            if (this.cur == null) {
+                this.cur = ForestStamp.source(def, p.seed, this.store, this.useSaved);
+                this.cell = 0;
             }
-            int x = ForestGen.ux(k), y = ForestGen.uy(k), z = ForestGen.uz(k);
-            this.pos.set(x, y, z);
-            BlockState st = this.states.get(m);
-            if (m == Mat.RAIL && st.hasProperty(BlockStateProperties.NORTH)) {
-                st = st.setValue(BlockStateProperties.NORTH, this.gen.at(x, y, z - 1) == Mat.RAIL)
-                        .setValue(BlockStateProperties.SOUTH, this.gen.at(x, y, z + 1) == Mat.RAIL)
-                        .setValue(BlockStateProperties.EAST, this.gen.at(x + 1, y, z) == Mat.RAIL)
-                        .setValue(BlockStateProperties.WEST, this.gen.at(x - 1, y, z) == Mat.RAIL);
+            long yz = (long) def.sy * def.sz;
+            long total = def.sx * yz;
+            while (this.cell < total) {
+                long i = this.cell++;
+                int x = (int) (i / yz);
+                int rem = (int) (i % yz);
+                int y = rem / def.sz, z = rem % def.sz;
+                BlockState st = this.cur.at(x, y, z);
+                if (st != null) {
+                    int[] r = ForestDefs.rotate(x - def.ax, z - def.az, p.rot);
+                    this.pos.set(p.x + r[0], p.y + (y - def.ay), p.z + r[1]);
+                    this.level.setBlock(this.pos, p.rot == 0 ? st : st.rotate(ROT[p.rot & 3]), FLAGS);
+                }
+                if ((++ops & 1023) == 0 && System.nanoTime() > end) {
+                    return false;
+                }
             }
-            this.level.setBlock(this.pos, st, FLAGS);
-            budget--;
+            seal(p);
+            this.cur = null;
+            this.si++;
         }
-        return this.ci >= this.clearKeys.length && this.ki >= this.keys.length;
+        return true;
     }
 
-    // ---- materials from settings
-    private static Block block(String id, Block fallback) {
-        ResourceLocation rl = ResourceLocation.tryParse(id.trim());
-        if (rl == null) {
-            return fallback;
+    // fills the doorways / railing gaps that no bridge or log goes through, with the block found next to them
+    private void seal(Placement p) {
+        for (int di : p.sealed) {
+            Door d = p.def.doors.get(di);
+            BlockState sample = this.level.getBlockState(world(p, ForestDefs.dx(d.face, d.sampleR, d.sampleL), d.sampleY(),
+                    ForestDefs.dz(d.face, d.sampleR, d.sampleL)));
+            if (sample.isAir()) {
+                sample = ForestStamp.state(d.fallback);
+            }
+            boolean rail = d.fallback == com.meshi.forest.PartGrid.Mat.RAIL;
+            for (int l = -(d.w / 2); l <= d.w / 2; l++) {
+                for (int r = d.r0; r <= d.r1; r++) {
+                    for (int y = d.floorY(); y < d.floorY() + d.h; y++) {
+                        if (rail && y > d.floorY() + 1) {
+                            continue;
+                        }
+                        this.level.setBlock(world(p, ForestDefs.dx(d.face, r, l), y, ForestDefs.dz(d.face, r, l)), sample, Block.UPDATE_CLIENTS);
+                    }
+                }
+            }
+            // fences / walls next to the filled spot need to connect to it
+            for (int l = -(d.w / 2) - 1; l <= d.w / 2 + 1; l++) {
+                for (int r = d.r0 - 1; r <= d.r1 + 1; r++) {
+                    for (int y = d.floorY(); y < d.floorY() + d.h; y++) {
+                        BlockPos bp = world(p, ForestDefs.dx(d.face, r, l), y, ForestDefs.dz(d.face, r, l));
+                        BlockState s = this.level.getBlockState(bp);
+                        if (s.getBlock() instanceof CrossCollisionBlock || s.getBlock() instanceof WallBlock) {
+                            BlockState n = Block.updateFromNeighbourShapes(s, this.level, bp);
+                            if (n != s) {
+                                this.level.setBlock(bp, n, FLAGS);
+                            }
+                        }
+                    }
+                }
+            }
         }
-        return BuiltInRegistries.BLOCK.getOptional(rl).orElse(fallback);
     }
 
-    private static BlockState withAxis(BlockState st, Direction.Axis axis) {
-        return st.hasProperty(BlockStateProperties.AXIS) ? st.setValue(BlockStateProperties.AXIS, axis) : st;
-    }
-
-    private static BlockState leaves(Block b) {
-        BlockState st = b.defaultBlockState();
-        return st.hasProperty(LeavesBlock.PERSISTENT) ? st.setValue(LeavesBlock.PERSISTENT, true) : st;
-    }
-
-    private static BlockState ladder(Block b, Direction facing) {
-        BlockState st = b.defaultBlockState();
-        return st.hasProperty(BlockStateProperties.HORIZONTAL_FACING) ? st.setValue(BlockStateProperties.HORIZONTAL_FACING, facing) : st;
-    }
-
-    private void fill(ForestSettings s) {
-        BlockState trunk = withAxis(block(s.get("block_trunk"), Blocks.DARK_OAK_LOG).defaultBlockState(), Direction.Axis.Y);
-        Block logB = block(s.get("block_log"), Blocks.DARK_OAK_LOG);
-        Block ladderB = block(s.get("block_ladder"), Blocks.LADDER);
-        this.states.put(Mat.AIR, Blocks.AIR.defaultBlockState());
-        this.states.put(Mat.TRUNK, trunk);
-        this.states.put(Mat.LOG_X, withAxis(logB.defaultBlockState(), Direction.Axis.X));
-        this.states.put(Mat.LOG_Z, withAxis(logB.defaultBlockState(), Direction.Axis.Z));
-        this.states.put(Mat.BEAM, withAxis(block(s.get("block_beam"), Blocks.STRIPPED_DARK_OAK_LOG).defaultBlockState(), Direction.Axis.Y));
-        this.states.put(Mat.STONE, block(s.get("block_stone"), Blocks.STONE_BRICKS).defaultBlockState());
-        this.states.put(Mat.MSTONE, block(s.get("block_mossy"), Blocks.MOSSY_STONE_BRICKS).defaultBlockState());
-        this.states.put(Mat.BAND, block(s.get("block_band"), Blocks.POLISHED_DIORITE).defaultBlockState());
-        this.states.put(Mat.PLANK, block(s.get("block_plank"), Blocks.SPRUCE_PLANKS).defaultBlockState());
-        this.states.put(Mat.RAIL, block(s.get("block_rail"), Blocks.SPRUCE_FENCE).defaultBlockState());
-        this.states.put(Mat.MOSS, block(s.get("block_moss"), Blocks.MOSS_BLOCK).defaultBlockState());
-        this.states.put(Mat.LEAF, leaves(block(s.get("block_leaf"), Blocks.OAK_LEAVES)));
-        this.states.put(Mat.LEAF2, leaves(block(s.get("block_leaf2"), Blocks.SPRUCE_LEAVES)));
-        this.states.put(Mat.LEAF3, leaves(block(s.get("block_leaf3"), Blocks.AZALEA_LEAVES)));
-        this.states.put(Mat.VINE, block(s.get("block_vine"), Blocks.CAVE_VINES_PLANT).defaultBlockState());
-        this.states.put(Mat.NEST, block(s.get("block_nest"), Blocks.HAY_BLOCK).defaultBlockState());
-        this.states.put(Mat.EGG, block(s.get("block_egg"), Blocks.CALCITE).defaultBlockState());
-        this.states.put(Mat.LANTERN, block(s.get("block_lantern"), Blocks.SOUL_LANTERN).defaultBlockState());
-        this.states.put(Mat.LADDER_N, ladder(ladderB, Direction.NORTH));
-        this.states.put(Mat.LADDER_S, ladder(ladderB, Direction.SOUTH));
-        this.states.put(Mat.LADDER_E, ladder(ladderB, Direction.EAST));
-        this.states.put(Mat.LADDER_W, ladder(ladderB, Direction.WEST));
+    // local cell (anchor relative x / z, y relative to the base) -> world pos, turned like the placement
+    private BlockPos world(Placement p, int lx, int ry, int lz) {
+        int[] r = ForestDefs.rotate(lx, lz, p.rot);
+        return new BlockPos(p.x + r[0], p.y + ry, p.z + r[1]);
     }
 }
