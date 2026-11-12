@@ -95,6 +95,11 @@ public class DungeonBuilder {
         }
     }
 
+    // true while building an edit plot (no mobs, no saved dungeon data, every plate slot shown)
+    boolean isPlot() {
+        return this.plotMode;
+    }
+
     public int remaining() {
         return this.queue.size();
     }
@@ -275,7 +280,6 @@ public class DungeonBuilder {
 
         switch (t.type) {
             case HALL, DEAD_END -> corridorMask(t);
-            case ROUND_ROOM -> roundMask(t);
             case GOLEM -> golemMask(t);
             case TRAP_PART -> trapPartMask(t);
             case SIDE_ROOM -> sideMask(t);
@@ -300,10 +304,6 @@ public class DungeonBuilder {
             case GOLEM -> DungeonRooms.golem(this);
             case STAIRS -> DungeonRooms.stairsTop(this);
             case ARRIVAL -> DungeonRooms.arrival(this);
-            case SLIME_ROOM -> DungeonRooms.slimeRoom(this);
-            case ARROW_GALLERY -> DungeonRooms.arrowGallery(this);
-            case SCORPION_ROOM -> DungeonRooms.scorpionRoom(this);
-            case ROUND_ROOM -> DungeonRooms.roundRoom(this);
             case SAFEZONE -> DungeonRooms.safezone(this);
             case TRAP_PART -> DungeonRooms.trapPart(this);
             // side rooms and the special room are empty on purpose
@@ -378,6 +378,10 @@ public class DungeonBuilder {
             for (int z = 0; z < TILE; z++) {
                 for (int rel = 0; rel < FLOOR_H; rel++) {
                     BlockState s = room.get(ox + x, rel, oz + z);
+                    // plates in a saved template are only slots, this dungeon's pattern decides which ones are real
+                    if (rel == 0 && !this.plotMode && t.trap != null && s.is(ModBlocks.RANDOM_TRAP_PLATE.get()) && !t.trap[x][z]) {
+                        s = Blocks.MUD_BRICKS.defaultBlockState();
+                    }
                     setL(x, rel, z, s);
                     if (s.is(Blocks.CHEST) || s.is(Blocks.BARREL) || s.is(Blocks.TRAPPED_CHEST)) {
                         String bound = room.poolAt(ox + x, rel, oz + z);
@@ -394,9 +398,9 @@ public class DungeonBuilder {
                 }
             }
         }
-        // saved with all 8 doorways open (2 per side), wall up the outer ones this room doesnt use
+        // saved with all 4 doorways open (middle of each side), wall up the ones this room doesnt use
         for (int side : new int[]{DungeonLayout.N, DungeonLayout.E, DungeonLayout.S, DungeonLayout.W}) {
-            if (!outerSide(t, side) || (t.ext & side) != 0) {
+            if (!doorSite(t, side) || (t.ext & side) != 0) {
                 continue;
             }
             int[] b = doorBox(Type.TRAP_PART, side);
@@ -410,10 +414,15 @@ public class DungeonBuilder {
         }
     }
 
-    // is this side of the quarter on the outside of the 2x2 room
+    // is this side of the cell on the outside of the 3x3 room
     static boolean outerSide(Tile t, int side) {
-        return side == DungeonLayout.N ? t.qz == 0 : side == DungeonLayout.S ? t.qz == 1
-                : side == DungeonLayout.W ? t.qx == 0 : t.qx == 1;
+        return side == DungeonLayout.N ? t.qz == 0 : side == DungeonLayout.S ? t.qz == 2
+                : side == DungeonLayout.W ? t.qx == 0 : t.qx == 2;
+    }
+
+    // the doorway of a side is in the middle cell of that side
+    static boolean doorSite(Tile t, int side) {
+        return outerSide(t, side) && (side == DungeonLayout.N || side == DungeonLayout.S ? t.qx == 1 : t.qz == 1);
     }
 
     private void stamp(RoomStore.Room room, String key, Tile t) {
@@ -509,7 +518,8 @@ public class DungeonBuilder {
 
     // where the player lands, on a clear spot by the entrance
     public static BlockPos plotSpawn(String key) {
-        return plotOrigin(key).offset(5, 1, 1);
+        // the big one lands in the north doorway lane (middle cell), the rest at the first cell
+        return plotOrigin(key).offset(RoomStore.isBig(key) ? TILE + 5 : 5, 1, 1);
     }
 
     // which plot is this position in (null = none)
@@ -526,22 +536,26 @@ public class DungeonBuilder {
         return null;
     }
 
-    // the 4 quarters of a big trap room plot, every outer side has its doorway open
+    // the 9 cells of the trap room plot, the doorway in the middle of every side is open
     private static List<Tile> bigPlotTiles(String key) {
-        Type kind = key.equals("big_slime") ? Type.SLIME_ROOM : key.equals("big_arrow") ? Type.ARROW_GALLERY
-                : key.equals("big_scorpion") ? Type.SCORPION_ROOM : Type.ROUND_ROOM;
         List<Tile> out = new ArrayList<>();
-        for (int qx = 0; qx < 2; qx++) {
-            for (int qz = 0; qz < 2; qz++) {
+        for (int qx = 0; qx < 3; qx++) {
+            for (int qz = 0; qz < 3; qz++) {
                 Tile t = new Tile(0, PLOT_TILE_X + 4 * bigIndex(key) + qx, PLOT_TILE_Z + 4 + qz);
                 t.type = Type.TRAP_PART;
-                t.kind = kind;
                 t.qx = qx;
                 t.qz = qz;
-                int inner = (qx == 0 ? DungeonLayout.E : DungeonLayout.W) | (qz == 0 ? DungeonLayout.S : DungeonLayout.N);
-                int outer = (qx == 0 ? DungeonLayout.W : DungeonLayout.E) | (qz == 0 ? DungeonLayout.N : DungeonLayout.S);
-                t.ext = outer;
-                t.mask = inner | outer;
+                int mask = 0;
+                if (qz > 0) mask |= DungeonLayout.N;
+                if (qz < 2) mask |= DungeonLayout.S;
+                if (qx > 0) mask |= DungeonLayout.W;
+                if (qx < 2) mask |= DungeonLayout.E;
+                for (int side : new int[]{DungeonLayout.N, DungeonLayout.E, DungeonLayout.S, DungeonLayout.W}) {
+                    if (doorSite(t, side)) {
+                        t.ext |= side;
+                    }
+                }
+                t.mask = mask | t.ext;
                 out.add(t);
             }
         }
@@ -557,13 +571,10 @@ public class DungeonBuilder {
         else if (key.startsWith("hall_")) t.type = Type.HALL;
         else if (key.startsWith("dead_end_")) t.type = Type.DEAD_END;
         else if (key.equals("golem")) t.type = Type.GOLEM;
-        else if (key.equals("slime_room")) t.type = Type.SLIME_ROOM;
-        else if (key.equals("arrow_gallery")) t.type = Type.ARROW_GALLERY;
-        else if (key.equals("scorpion_room")) t.type = Type.SCORPION_ROOM;
         else if (key.equals("safezone")) t.type = Type.SAFEZONE;
         else if (key.equals("side_room")) t.type = Type.SIDE_ROOM;
         else if (key.equals("special_room")) t.type = Type.SPECIAL;
-        else t.type = Type.ROUND_ROOM;
+        else t.type = Type.HALL;
         if (key.contains("_") && Character.isDigit(key.charAt(key.length() - 1))) {
             t.variant = key.charAt(key.length() - 1) - '0';
         }
@@ -589,19 +600,17 @@ public class DungeonBuilder {
         List<String> out = new ArrayList<>();
         BlockPos o = plotOrigin(key);
         if (RoomStore.isBig(key)) {
-            // 2 doorways per side, middle cell of each
+            // 4 doorways, middle cell of each side
             for (Tile t : bigPlotTiles(key)) {
                 for (int side : new int[]{DungeonLayout.N, DungeonLayout.E, DungeonLayout.S, DungeonLayout.W}) {
-                    if (!outerSide(t, side)) {
+                    if (!doorSite(t, side)) {
                         continue;
                     }
                     int[] d = doorBox(Type.TRAP_PART, side);
                     BlockPos c = o.offset(t.qx * TILE + (d[0] + d[1]) / 2, 1, t.qz * TILE + (d[2] + d[3]) / 2);
                     if (!level.getBlockState(c).getCollisionShape(level, c).isEmpty()) {
-                        String n = side == DungeonLayout.N ? "north" : side == DungeonLayout.E ? "east"
-                                : side == DungeonLayout.S ? "south" : "west";
-                        out.add(n + (side == DungeonLayout.N || side == DungeonLayout.S ? (t.qx == 0 ? " (left)" : " (right)")
-                                : (t.qz == 0 ? " (top)" : " (bottom)")));
+                        out.add(side == DungeonLayout.N ? "north" : side == DungeonLayout.E ? "east"
+                                : side == DungeonLayout.S ? "south" : "west");
                     }
                 }
             }
@@ -649,13 +658,9 @@ public class DungeonBuilder {
         if (t.has(DungeonLayout.W)) box(0, 0, 5, 5);
     }
 
-    // one quarter of a big trap room. sides that lead out get a normal doorway, sides to the other
-    // quarters open the whole edge
+    // one cell of the 3x3 trap room. a side that leads out gets a normal doorway, a side to the next cell of the
+    // room opens the whole edge
     private void trapPartMask(Tile t) {
-        if (t.kind == Type.ROUND_ROOM) {
-            roundPartMask(t);
-            return;
-        }
         box(1, 9, 1, 9);
         if (t.has(DungeonLayout.N)) {
             if ((t.ext & DungeonLayout.N) != 0) box(4, 6, 0, 0); else box(1, 9, 0, 0);
@@ -669,30 +674,16 @@ public class DungeonBuilder {
         if (t.has(DungeonLayout.W)) {
             if ((t.ext & DungeonLayout.W) != 0) box(0, 0, 4, 6); else box(0, 0, 1, 9);
         }
-        // the corner cell in the middle of the 2x2 (else there is a pillar there)
-        box(t.qx == 0 ? 10 : 0, t.qx == 0 ? 10 : 0, t.qz == 0 ? 10 : 0, t.qz == 0 ? 10 : 0);
-    }
-
-    // big circle over the 22x22 block, plus a corridor from each door to the middle of its quarter
-    private void roundPartMask(Tile t) {
-        for (int x = 0; x < TILE; x++) {
-            for (int z = 0; z < TILE; z++) {
-                if (inBigCircle(t, x, z)) {
-                    this.open[x][z] = true;
+        // corners where two joined sides meet, else there are pillars inside the room
+        for (int cx : new int[]{0, 10}) {
+            for (int cz : new int[]{0, 10}) {
+                int sx = cx == 0 ? DungeonLayout.W : DungeonLayout.E;
+                int sz = cz == 0 ? DungeonLayout.N : DungeonLayout.S;
+                if (t.has(sx) && (t.ext & sx) == 0 && t.has(sz) && (t.ext & sz) == 0) {
+                    this.open[cx][cz] = true;
                 }
             }
         }
-        if ((t.ext & DungeonLayout.N) != 0) box(4, 6, 0, 5);
-        if ((t.ext & DungeonLayout.E) != 0) box(5, 10, 4, 6);
-        if ((t.ext & DungeonLayout.S) != 0) box(4, 6, 5, 10);
-        if ((t.ext & DungeonLayout.W) != 0) box(0, 5, 4, 6);
-    }
-
-    // is this cell of a round trap quarter inside the big circle (centre = middle of the 22x22 block)
-    static boolean inBigCircle(Tile t, int lx, int lz) {
-        double dx = t.qx * TILE + lx + 0.5D - TILE;
-        double dz = t.qz * TILE + lz + 0.5D - TILE;
-        return dx * dx + dz * dz <= 90.25D;
     }
 
     // small side room (5x5) with a short corridor to its one door
@@ -702,20 +693,6 @@ public class DungeonBuilder {
         if (t.has(DungeonLayout.E)) box(8, 10, 4, 6);
         if (t.has(DungeonLayout.S)) box(4, 6, 8, 10);
         if (t.has(DungeonLayout.W)) box(0, 2, 4, 6);
-    }
-
-    private void roundMask(Tile t) {
-        for (int x = 0; x < TILE; x++) {
-            for (int z = 0; z < TILE; z++) {
-                if ((x - 5) * (x - 5) + (z - 5) * (z - 5) <= 20) {
-                    this.open[x][z] = true;
-                }
-            }
-        }
-        if (t.has(DungeonLayout.N)) box(4, 6, 0, 1);
-        if (t.has(DungeonLayout.E)) box(9, 10, 4, 6);
-        if (t.has(DungeonLayout.S)) box(4, 6, 9, 10);
-        if (t.has(DungeonLayout.W)) box(0, 1, 4, 6);
     }
 
     // ---- end: 20 mushrooms to start with

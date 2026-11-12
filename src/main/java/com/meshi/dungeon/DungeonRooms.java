@@ -234,92 +234,10 @@ final class DungeonRooms {
         }
     }
 
-    // ---- trap rooms
+    // ---- trap room (3x3 cells). every cell runs this once, qx / qz say which cell of the room it is.
+    // the plates come from the trap pattern of this room (new one every dungeon, see DungeonTrapPattern), each plate sets
+    // off a random trap. no plates in front of the doorways. the edit plot shows every slot a plate can be in
 
-    static void slimeRoom(DungeonBuilder b) {
-        flatFloor(b);
-        BlockState plate = ModBlocks.SLIME_TRAP_PLATE.get().defaultBlockState();
-        for (int x = 1; x <= 9; x++) {
-            for (int z = 1; z <= 9; z++) {
-                boolean lane = (x >= 4 && x <= 6 && (z <= 2 || z >= 8)) || (z >= 4 && z <= 6 && (x <= 2 || x >= 8));
-                if (!lane && b.rng.nextInt(100) < 35) {
-                    b.setL(x, 0, z, plate);
-                }
-            }
-        }
-        cornerTorches(b);
-        roomSpots(b);
-    }
-
-    // plates in 3 rows, every plate drops arrows on whoever stands on it (from the roof, see TrapFloorBlock)
-    static void arrowGallery(DungeonBuilder b) {
-        flatFloor(b);
-        BlockState plate = ModBlocks.ARROW_TRAP_PLATE.get().defaultBlockState();
-        for (int z : new int[]{3, 5, 7}) {
-            for (int x = 1; x <= 9; x++) {
-                b.setL(x, 0, z, plate);
-            }
-        }
-        b.torch(3, 3, 1, Direction.SOUTH);
-        b.torch(7, 3, 9, Direction.NORTH);
-        roomSpots(b);
-    }
-
-    // looks like a treasure room. the burrows in the walls wake up when you walk in
-    static void scorpionRoom(DungeonBuilder b) {
-        for (int x = 4; x <= 6; x++) {
-            for (int z = 4; z <= 6; z++) {
-                b.setL(x, 0, z, Blocks.BRICKS.defaultBlockState());
-            }
-        }
-        b.chest(5, 5, Direction.SOUTH);
-        b.burrow(3, 1, Direction.SOUTH);
-        b.burrow(7, 1, Direction.SOUTH);
-        b.burrow(3, 9, Direction.NORTH);
-        b.burrow(7, 9, Direction.NORTH);
-        b.burrow(1, 3, Direction.EAST);
-        b.burrow(9, 7, Direction.WEST);
-        b.torch(1, 3, 7, Direction.EAST);
-        b.torch(9, 3, 3, Direction.WEST);
-        roomSpots(b);
-    }
-
-    // round room, plates everywhere except right at the doorways
-    static void roundRoom(DungeonBuilder b) {
-        BlockState plate = ModBlocks.RANDOM_TRAP_PLATE.get().defaultBlockState();
-        List<int[]> ring = new ArrayList<>();
-        for (int x = 0; x < DungeonBuilder.TILE; x++) {
-            for (int z = 0; z < DungeonBuilder.TILE; z++) {
-                if (!b.open[x][z]) {
-                    continue;
-                }
-                boolean lane = (x >= 4 && x <= 6 && (z <= 1 || z >= 9)) || (z >= 4 && z <= 6 && (x <= 1 || x >= 9));
-                if (lane) {
-                    b.setL(x, 0, z, Blocks.MUD_BRICKS.defaultBlockState());
-                } else {
-                    b.setL(x, 0, z, plate);
-                }
-                int r2 = (x - 5) * (x - 5) + (z - 5) * (z - 5);
-                if (r2 >= 14) {
-                    ring.add(new int[]{x, z});
-                }
-            }
-        }
-        Collections.shuffle(ring, b.rng);
-        int torches = 0;
-        for (int[] c : ring) {
-            for (Direction d : HORIZ) {
-                if (torches < 5 && b.torch(c[0], 3, c[1], d)) {
-                    torches++;
-                    break;
-                }
-            }
-        }
-    }
-
-    // ---- big trap rooms (2x2 cells). every quarter runs this once, qx / qz say which quarter it is
-
-    // plate-free strip in front of a door that leads out of the room
     private static boolean lane(Tile t, int x, int z) {
         return ((t.ext & DungeonLayout.N) != 0 && x >= 4 && x <= 6 && z <= 2)
                 || ((t.ext & DungeonLayout.E) != 0 && z >= 4 && z <= 6 && x >= 8)
@@ -329,92 +247,17 @@ final class DungeonRooms {
 
     static void trapPart(DungeonBuilder b) {
         Tile t = b.tile;
-        switch (t.kind) {
-            case SLIME_ROOM -> bigSlime(b, t);
-            case ARROW_GALLERY -> bigArrows(b, t);
-            case SCORPION_ROOM -> bigScorpion(b, t);
-            default -> bigRound(b, t);
-        }
-        roomSpots(b);
-    }
-
-    private static void bigSlime(DungeonBuilder b, Tile t) {
         flatFloor(b);
-        BlockState plate = ModBlocks.SLIME_TRAP_PLATE.get().defaultBlockState();
-        for (int x = 1; x <= 9; x++) {
-            for (int z = 1; z <= 9; z++) {
-                if (!lane(t, x, z) && b.rng.nextInt(100) < 35) {
+        BlockState plate = ModBlocks.RANDOM_TRAP_PLATE.get().defaultBlockState();
+        for (int x = 0; x < DungeonBuilder.TILE; x++) {
+            for (int z = 0; z < DungeonBuilder.TILE; z++) {
+                if (b.open[x][z] && !lane(t, x, z) && (b.isPlot() || t.trap == null || t.trap[x][z])) {
                     b.setL(x, 0, z, plate);
                 }
             }
         }
         cornerTorches(b);
-    }
-
-    // rows of arrow plates, the rows run straight through the quarters
-    private static void bigArrows(DungeonBuilder b, Tile t) {
-        flatFloor(b);
-        BlockState plate = ModBlocks.ARROW_TRAP_PLATE.get().defaultBlockState();
-        for (int z : new int[]{3, 5, 7}) {
-            for (int x = 0; x <= 10; x++) {
-                boolean door = (x == 0 && (t.ext & DungeonLayout.W) != 0) || (x == 10 && (t.ext & DungeonLayout.E) != 0);
-                if (b.open[x][z] && !door) {
-                    b.setL(x, 0, z, plate);
-                }
-            }
-        }
-        b.torch(3, 3, 1, Direction.SOUTH);
-        b.torch(7, 3, 9, Direction.NORTH);
-    }
-
-    // one chest by the middle of the room (north west quarter only), burrows in the outer walls
-    private static void bigScorpion(DungeonBuilder b, Tile t) {
-        if (t.qx == 0 && t.qz == 0) {
-            for (int x = 7; x <= 9; x++) {
-                for (int z = 7; z <= 9; z++) {
-                    b.setL(x, 0, z, Blocks.BRICKS.defaultBlockState());
-                }
-            }
-            b.chest(9, 9, Direction.WEST);
-        }
-        b.burrow(3, 1, Direction.SOUTH);
-        b.burrow(7, 9, Direction.NORTH);
-        b.burrow(1, 7, Direction.EAST);
-        b.burrow(9, 3, Direction.WEST);
-        b.torch(1, 3, 3, Direction.EAST);
-        b.torch(9, 3, 7, Direction.WEST);
-    }
-
-    private static void bigRound(DungeonBuilder b, Tile t) {
-        BlockState plate = ModBlocks.RANDOM_TRAP_PLATE.get().defaultBlockState();
-        List<int[]> ring = new ArrayList<>();
-        for (int x = 0; x < DungeonBuilder.TILE; x++) {
-            for (int z = 0; z < DungeonBuilder.TILE; z++) {
-                if (!b.open[x][z]) {
-                    continue;
-                }
-                if (DungeonBuilder.inBigCircle(t, x, z) && !lane(t, x, z)) {
-                    b.setL(x, 0, z, plate);
-                } else {
-                    b.setL(x, 0, z, Blocks.MUD_BRICKS.defaultBlockState());
-                }
-                double dx = t.qx * DungeonBuilder.TILE + x + 0.5D - DungeonBuilder.TILE;
-                double dz = t.qz * DungeonBuilder.TILE + z + 0.5D - DungeonBuilder.TILE;
-                if (dx * dx + dz * dz >= 64.0D) {
-                    ring.add(new int[]{x, z});
-                }
-            }
-        }
-        Collections.shuffle(ring, b.rng);
-        int torches = 0;
-        for (int[] c : ring) {
-            for (Direction d : HORIZ) {
-                if (torches < 3 && b.torch(c[0], 3, c[1], d)) {
-                    torches++;
-                    break;
-                }
-            }
-        }
+        roomSpots(b);
     }
 
     // ---- safezone. no mobs spawn in here and nothing hunts you inside. edit it ingame like any other room

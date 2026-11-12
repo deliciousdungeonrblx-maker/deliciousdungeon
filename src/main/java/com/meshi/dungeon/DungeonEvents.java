@@ -50,7 +50,7 @@ public class DungeonEvents {
     private static DungeonBuilder builder = null;
 
     private static final SuggestionProvider<CommandSourceStack> ROOM_SUGGEST =
-            (ctx, sb) -> SharedSuggestionProvider.suggest(RoomStore.KEYS, sb);
+            (ctx, sb) -> SharedSuggestionProvider.suggest(RoomStore.editable(), sb);
 
     private static final SuggestionProvider<CommandSourceStack> POOL_SUGGEST = (ctx, sb) -> {
         ServerLevel level = ctx.getSource().getServer().getLevel(DIMENSION);
@@ -105,6 +105,10 @@ public class DungeonEvents {
                                 .then(Commands.literal("unbind").executes(DungeonEvents::lootUnbind))
                                 .then(Commands.literal("refill").executes(DungeonEvents::lootRefill)))
                         .then(Commands.literal("tp").executes(DungeonEvents::teleport))
+                        .then(Commands.literal("trapsense")
+                                .executes(ctx -> trapSense(ctx, 10))
+                                .then(Commands.argument("radius", IntegerArgumentType.integer(1, 16))
+                                        .executes(ctx -> trapSense(ctx, IntegerArgumentType.getInteger(ctx, "radius")))))
                         .then(Commands.literal("room")
                                 .then(Commands.literal("list").executes(DungeonEvents::roomList))
                                 .then(Commands.literal("edit")
@@ -117,6 +121,18 @@ public class DungeonEvents {
                                 .then(Commands.literal("reset")
                                         .then(Commands.argument("room", StringArgumentType.word()).suggests(ROOM_SUGGEST)
                                                 .executes(DungeonEvents::roomReset))))));
+    }
+
+    // one pulse of sparks over the trap plates around the player (what a locksmith sees all the time)
+    private static int trapSense(CommandContext<CommandSourceStack> ctx, int radius) {
+        ServerPlayer player = ctx.getSource().getPlayer();
+        if (player == null) {
+            ctx.getSource().sendFailure(Component.literal("players only"));
+            return 0;
+        }
+        int found = DungeonSense.pulse(player.serverLevel(), player, radius);
+        ctx.getSource().sendSuccess(() -> Component.literal("marked " + found + " trap plates within " + radius + " blocks"), false);
+        return found;
     }
 
     private static com.mojang.brigadier.arguments.ArgumentType<Integer> sizeArg() {
@@ -182,7 +198,7 @@ public class DungeonEvents {
 
     private static String roomArg(CommandContext<CommandSourceStack> ctx) {
         String key = StringArgumentType.getString(ctx, "room");
-        if (!RoomStore.KEYS.contains(key)) {
+        if (!RoomStore.editable().contains(key)) {
             ctx.getSource().sendFailure(Component.literal("no room called " + key + ", use /meshi dungeon room list"));
             return null;
         }
@@ -197,9 +213,8 @@ public class DungeonEvents {
         }
         RoomStore store = RoomStore.get(level);
         StringBuilder sb = new StringBuilder("rooms (* = you edited it):");
-        for (String key : RoomStore.KEYS) {
-            sb.append("\n ").append(store.has(key) ? "* " : "  ").append(key)
-                    .append(RoomStore.unused(key) ? " (old, not generated any more)" : "");
+        for (String key : RoomStore.editable()) {
+            sb.append("\n ").append(store.has(key) ? "* " : "  ").append(key);
         }
         ctx.getSource().sendSuccess(() -> Component.literal(sb.toString()), false);
         return 1;
@@ -226,7 +241,7 @@ public class DungeonEvents {
         BlockPos at = DungeonBuilder.plotSpawn(key);
         player.teleportTo(level, at.getX() + 0.5D, at.getY(), at.getZ() + 0.5D, 0.0F, 0.0F);
         String doors = RoomStore.isBig(key)
-                ? "this room is 22x22 (2x2 cells) with 2 doorways on every side. keep all 8 open, the generator walls up the 4 it doesnt need."
+                ? "this room is 33x33 (3x3 cells) with a doorway in the middle of every side. keep all 4 open, the generator walls up the 3 it doesnt need (the side rooms hang off those). every trap plate here is only a slot, each dungeon picks which slots are real traps (new pattern per room, with a safe winding path between the doors)."
                 : RoomStore.singleEntrance(key)
                 ? "this room has ONE entrance, keep it on the north side."
                 : "keep all 4 doorways open, the generator walls up the ones it doesnt need.";
@@ -463,6 +478,7 @@ public class DungeonEvents {
         if (level == null) {
             return;
         }
+        DungeonSense.tick(level);
         if (builder != null) {
             if (builder.tick(2)) {
                 builder = null;

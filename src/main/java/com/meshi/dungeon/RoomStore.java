@@ -33,8 +33,8 @@ public class RoomStore extends SavedData {
             "golem", "slime_room", "arrow_gallery", "scorpion_room", "round_room",
             // NEW ONES GO AT THE END ONLY. the plot position of a room is its index in this list
             "safezone", "side_room", "special_room",
-            // the 2x2 trap rooms, saved as one 22 x 8 x 22 grid each
-            "big_slime", "big_arrow", "big_scorpion", "big_round");
+            // the 3x3 trap room, saved as one 33 x 8 x 33 grid
+            "trap_room");
 
     public static final class Room {
         final List<BlockState> palette;
@@ -77,21 +77,10 @@ public class RoomStore extends SavedData {
         if (type == Type.HALL) return "hall_" + t.variant;
         if (type == Type.DEAD_END) return "dead_end_" + t.variant;
         if (type == Type.GOLEM) return "golem";
-        if (type == Type.SLIME_ROOM) return "slime_room";
-        if (type == Type.ARROW_GALLERY) return "arrow_gallery";
-        if (type == Type.SCORPION_ROOM) return "scorpion_room";
-        if (type == Type.ROUND_ROOM) return "round_room";
         if (type == Type.SAFEZONE) return "safezone";
         if (type == Type.SIDE_ROOM) return "side_room";
         if (type == Type.SPECIAL) return "special_room";
-        if (type == Type.TRAP_PART) {
-            return switch (t.kind) {
-                case SLIME_ROOM -> "big_slime";
-                case ARROW_GALLERY -> "big_arrow";
-                case SCORPION_ROOM -> "big_scorpion";
-                default -> "big_round";
-            };
-        }
+        if (type == Type.TRAP_PART) return "trap_room";
         return null;
     }
 
@@ -101,17 +90,22 @@ public class RoomStore extends SavedData {
     }
 
     public static boolean isBig(String key) {
-        return key.startsWith("big_");
+        return key.equals("trap_room");
     }
 
     // width / depth of a saved room in blocks
     public static int sizeOf(String key) {
-        return isBig(key) ? 2 * DungeonBuilder.TILE : DungeonBuilder.TILE;
+        return isBig(key) ? 3 * DungeonBuilder.TILE : DungeonBuilder.TILE;
     }
 
-    // the 4 old single cell trap rooms are not generated any more, their saves just stay in the world data
+    // the 4 old trap rooms are gone. they stay in KEYS (the plot spot of every room is its index) but cant be edited
+    // or generated, their saves just stay in the world data
     public static boolean unused(String key) {
         return key.equals("slime_room") || key.equals("arrow_gallery") || key.equals("scorpion_room") || key.equals("round_room");
+    }
+
+    public static List<String> editable() {
+        return KEYS.stream().filter(k -> !unused(k)).toList();
     }
 
     public boolean has(String key) {

@@ -17,10 +17,9 @@ public final class DungeonLayout {
     // bit per side
     public static final int N = 1, E = 2, S = 4, W = 8;
 
-    public enum Type { SPAWN, HALL, DEAD_END, GOLEM, STAIRS, ARRIVAL, SLIME_ROOM, ARROW_GALLERY, SCORPION_ROOM, ROUND_ROOM, SAFEZONE,
-            // TRAP_PART = one cell of a big 2x2 trap room (kind = which trap), SIDE_ROOM = small empty room next to it,
-            // SPECIAL = the one empty room on the last floor
-            TRAP_PART, SIDE_ROOM, SPECIAL }
+    // TRAP_PART = one cell of the 3x3 trap room, SIDE_ROOM = small empty room off the middle of a side of it,
+    // SPECIAL = the one empty room on the last floor
+    public enum Type { SPAWN, HALL, DEAD_END, GOLEM, STAIRS, ARRIVAL, SAFEZONE, TRAP_PART, SIDE_ROOM, SPECIAL }
 
     public static final class Tile {
         public final int floor, x, z;
@@ -28,9 +27,10 @@ public final class DungeonLayout {
         public Type type = Type.HALL;
         public int variant;
         public boolean plate;
-        // big trap room only: which trap it is, which quarter of the 2x2 (0 = west / north), and the sides that lead OUT of it
-        public Type kind;
+        // trap room only: which cell of the 3x3 this is (0..2), and the sides that lead OUT of the room
         public int qx, qz, ext;
+        // trap room only: which floor blocks of this cell are trap plates [x][z] (cut out of the 33x33 pattern)
+        public boolean[][] trap;
 
         Tile(int floor, int x, int z) {
             this.floor = floor;
@@ -94,83 +94,57 @@ public final class DungeonLayout {
         return dx == 1 ? E : dx == -1 ? W : dz == 1 ? S : N;
     }
 
-    // one trap complex: 2x2 trap room + 3 small side rooms + 1 entrance cell. cells are absolute grid coords
+    // one trap complex: 3x3 trap room, a side room off the middle of 3 sides and the entrance off the 4th.
+    // cells are absolute grid coords
     private static final class Complex {
-        final Type kind;
-        final int[][] parts = new int[4][];
+        // {x, z, qx, qz}
+        final int[][] parts = new int[9][];
         // {annex x, annex z, parent x, parent z}
         final int[][] annex = new int[3][];
         // {entrance x, entrance z, parent x, parent z}
         int[] ent;
-
-        Complex(Type kind) {
-            this.kind = kind;
-        }
     }
 
     // tries to find room for one complex. reserved = cells the maze must leave alone
-    private Complex place(Type kind, boolean[][] reserved, boolean[][] entrance, int sx, int sz, Random rng) {
+    private Complex place(boolean[][] reserved, boolean[][] entrance, int sx, int sz, Random rng) {
+        if (this.grid < 5) {
+            return null;
+        }
         for (int attempt = 0; attempt < 250; attempt++) {
-            // canonical shape, entrance on the south. cell lists are {x, z, parent x, parent z}
-            int a = rng.nextInt(2), b = rng.nextInt(2), c = rng.nextInt(2), e = rng.nextInt(2);
-            int[][] raw = {
-                    {0, 0, -1, -1}, {1, 0, -1, -1}, {0, 1, -1, -1}, {1, 1, -1, -1},
-                    {a, -1, a, 0}, {-1, b, 0, b}, {2, c, 1, c}, {e, 2, e, 1}};
-            int turns = rng.nextInt(4);
-            for (int ri = 0; ri < raw.length; ri++) {
-                int[] r = raw[ri];
-                for (int i = 0; i < turns; i++) {
-                    int nx = -r[1];
-                    r[1] = r[0];
-                    r[0] = nx;
-                    // parts (first 4) have no parent to turn
-                    if (ri >= 4) {
-                        int px = -r[3];
-                        r[3] = r[2];
-                        r[2] = px;
-                    }
-                }
-            }
-            int minX = 99, maxX = -99, minZ = 99, maxZ = -99;
-            for (int[] r : raw) {
-                minX = Math.min(minX, r[0]);
-                maxX = Math.max(maxX, r[0]);
-                minZ = Math.min(minZ, r[1]);
-                maxZ = Math.max(maxZ, r[1]);
-            }
-            int spanX = this.grid - (maxX - minX);
-            int spanZ = this.grid - (maxZ - minZ);
-            if (spanX <= 0 || spanZ <= 0) {
-                continue;
-            }
-            int ox = rng.nextInt(spanX) - minX;
-            int oz = rng.nextInt(spanZ) - minZ;
+            // 5x5 box, the room is the middle 3x3 and the 4 arms stick out of the middle of each side
+            int ox = rng.nextInt(this.grid - 4);
+            int oz = rng.nextInt(this.grid - 4);
+            int[][] arms = {{ox + 2, oz, ox + 2, oz + 1}, {ox + 4, oz + 2, ox + 3, oz + 2},
+                    {ox + 2, oz + 4, ox + 2, oz + 3}, {ox, oz + 2, ox + 1, oz + 2}};
+            int entArm = rng.nextInt(4);
             boolean ok = true;
-            for (int i = 0; i < raw.length && ok; i++) {
-                int[] r = raw[i];
-                int x = r[0] + ox, z = r[1] + oz;
-                if (x < 0 || z < 0 || x >= this.grid || z >= this.grid || (x == sx && z == sz)) {
-                    ok = false;
-                } else {
-                    ok = !reserved[x][z] && !entrance[x][z];
-                }
+            for (int i = 0; i < 9 && ok; i++) {
+                int x = ox + 1 + i / 3, z = oz + 1 + i % 3;
+                ok = !reserved[x][z] && !entrance[x][z] && !(x == sx && z == sz);
+            }
+            for (int[] a : arms) {
+                ok = ok && !reserved[a[0]][a[1]] && !entrance[a[0]][a[1]] && !(a[0] == sx && a[1] == sz);
             }
             if (!ok) {
                 continue;
             }
             // mark, then make sure the rest of the grid is still one piece
-            Complex cx = new Complex(kind);
-            for (int i = 0; i < 7; i++) {
-                int x = raw[i][0] + ox, z = raw[i][1] + oz;
+            Complex cx = new Complex();
+            for (int i = 0; i < 9; i++) {
+                int x = ox + 1 + i / 3, z = oz + 1 + i % 3;
                 reserved[x][z] = true;
-                if (i < 4) {
-                    cx.parts[i] = new int[]{x, z};
+                cx.parts[i] = new int[]{x, z, i / 3, i % 3};
+            }
+            int n = 0;
+            for (int k = 0; k < 4; k++) {
+                if (k == entArm) {
+                    cx.ent = arms[k];
+                    entrance[arms[k][0]][arms[k][1]] = true;
                 } else {
-                    cx.annex[i - 4] = new int[]{x, z, raw[i][2] + ox, raw[i][3] + oz};
+                    reserved[arms[k][0]][arms[k][1]] = true;
+                    cx.annex[n++] = arms[k];
                 }
             }
-            cx.ent = new int[]{raw[7][0] + ox, raw[7][1] + oz, raw[7][2] + ox, raw[7][3] + oz};
-            entrance[cx.ent[0]][cx.ent[1]] = true;
             if (freeIsConnected(reserved, sx, sz)) {
                 return cx;
             }
@@ -215,28 +189,26 @@ public final class DungeonLayout {
         return count == free;
     }
 
-    // turns the reserved cells into the finished trap room (parts linked to each other, side rooms, one entrance)
-    private void buildComplex(int f, Complex cx) {
-        int minX = 99, minZ = 99;
-        for (int[] p : cx.parts) {
-            minX = Math.min(minX, p[0]);
-            minZ = Math.min(minZ, p[1]);
-        }
+    // turns the reserved cells into the finished trap room (cells joined, side rooms, one entrance)
+    private void buildComplex(int f, Complex cx, Random rng) {
+        // new trap pattern for every trap room
+        boolean[][] pattern = DungeonTrapPattern.generate(rng);
         for (int[] p : cx.parts) {
             Tile t = this.tiles[f][p[0]][p[1]];
             t.type = Type.TRAP_PART;
-            t.kind = cx.kind;
-            t.qx = p[0] - minX;
-            t.qz = p[1] - minZ;
-        }
-        // parts next to each other are joined (the shared edge opens up in the builder)
-        for (int[] p : cx.parts) {
-            for (int[] q : cx.parts) {
-                if (q[0] == p[0] + 1 && q[1] == p[1]) {
-                    link(f, p[0], p[1], E);
-                } else if (q[0] == p[0] && q[1] == p[1] + 1) {
-                    link(f, p[0], p[1], S);
+            t.qx = p[2];
+            t.qz = p[3];
+            t.trap = new boolean[11][11];
+            for (int x = 0; x < 11; x++) {
+                for (int z = 0; z < 11; z++) {
+                    t.trap[x][z] = pattern[p[2] * 11 + x][p[3] * 11 + z];
                 }
+            }
+            if (p[2] < 2) {
+                link(f, p[0], p[1], E);
+            }
+            if (p[3] < 2) {
+                link(f, p[0], p[1], S);
             }
         }
         for (int[] a : cx.annex) {
@@ -254,25 +226,16 @@ public final class DungeonLayout {
     private int[] buildFloor(int f, int sx, int sz, Random rng) {
         int[] sides = {N, E, S, W};
 
-        // trap rooms: first floor is the gentle one. each one is a dead end 2x2 room with 3 side rooms
-        List<Type> traps = new ArrayList<>();
-        if (f == 0) {
-            traps.addAll(List.of(Type.SLIME_ROOM, Type.ARROW_GALLERY));
-        } else {
-            traps.addAll(List.of(Type.ROUND_ROOM, Type.SCORPION_ROOM, Type.SLIME_ROOM, Type.ARROW_GALLERY));
-        }
-        if (this.grid >= 12) {
-            traps.addAll(new ArrayList<>(traps));
-        }
-        // 7 cells each, dont let them eat more than a third of the floor
-        while (!traps.isEmpty() && traps.size() * 7 > this.grid * this.grid / 3) {
-            traps.remove(traps.size() - 1);
+        // trap rooms, 13 cells each (3x3 room + 3 side rooms + entrance). dont let them eat more than 2/5 of the floor
+        int count = this.grid >= 14 ? 3 : 2;
+        while (count > 0 && count * 13 > this.grid * this.grid * 2 / 5) {
+            count--;
         }
         boolean[][] reserved = new boolean[this.grid][this.grid];
         boolean[][] entrance = new boolean[this.grid][this.grid];
         List<Complex> complexes = new ArrayList<>();
-        for (Type kind : traps) {
-            Complex cx = place(kind, reserved, entrance, sx, sz, rng);
+        for (int i = 0; i < count; i++) {
+            Complex cx = place(reserved, entrance, sx, sz, rng);
             if (cx != null) {
                 complexes.add(cx);
             }
@@ -350,7 +313,7 @@ public final class DungeonLayout {
 
         // now hook the trap rooms onto their entrance cells
         for (Complex cx : complexes) {
-            buildComplex(f, cx);
+            buildComplex(f, cx, rng);
         }
 
         Tile start = this.tiles[f][sx][sz];
