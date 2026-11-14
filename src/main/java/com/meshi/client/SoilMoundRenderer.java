@@ -29,6 +29,11 @@ public class SoilMoundRenderer extends GeoEntityRenderer<SoilMoundEntity> {
     // height of the grass patch above the ground + a little so the item doesnt sink into it
     private static final float ITEM_Y = 0.50F;
     private static final float ITEM_SCALE = 0.55F;
+    // seeds -> grown crop: starts at the 1 minute mark, full size at the 10 second mark
+    private static final int GROW_START_SECONDS = 60;
+    private static final int GROW_END_SECONDS = 10;
+    private static final float GROWN_MIN_SCALE = 0.25F;
+    private static final float GROWN_MAX_SCALE = 0.7F;
 
     public SoilMoundRenderer(EntityRendererProvider.Context context) {
         super(context, new SoilMoundModel());
@@ -44,15 +49,23 @@ public class SoilMoundRenderer extends GeoEntityRenderer<SoilMoundEntity> {
     }
 
     // the planted items lying flat on the mound (like item frames), the painted flowers stay under them
+    // seeds until 1 minute is left, then the real crop (cabbage etc) appears small and grows to full size by the 10s mark
     private void drawPlantedItems(SoilMoundEntity mound, PoseStack poseStack, MultiBufferSource bufferSource,
                                   int packedLight) {
         List<GolemCrop> crops = mound.getPlantedClient();
         if (crops.isEmpty()) {
             return;
         }
+        int secs = mound.getTimerSeconds();
+        boolean grown = secs >= 0 && secs <= GROW_START_SECONDS;
+        // 0 at the 1 minute mark -> 1 at the 10 second mark
+        float progress = Math.max(0.0F, Math.min(1.0F,
+                (GROW_START_SECONDS - secs) / (float) (GROW_START_SECONDS - GROW_END_SECONDS)));
+        float scale = grown ? GROWN_MIN_SCALE + (GROWN_MAX_SCALE - GROWN_MIN_SCALE) * progress : ITEM_SCALE;
+
         Minecraft mc = Minecraft.getInstance();
         for (int i = 0; i < crops.size() && i < SLOT_X.length; i++) {
-            ItemStack stack = crops.get(i).plantStack();
+            ItemStack stack = grown ? crops.get(i).finalStack() : crops.get(i).plantStack();
             if (stack.isEmpty()) {
                 continue;
             }
@@ -60,7 +73,7 @@ public class SoilMoundRenderer extends GeoEntityRenderer<SoilMoundEntity> {
             poseStack.translate(SLOT_X[i], ITEM_Y, SLOT_Z[i]);
             // item faces +z by default, tip it so the front faces up
             poseStack.mulPose(Axis.XP.rotationDegrees(-90.0F));
-            poseStack.scale(ITEM_SCALE, ITEM_SCALE, ITEM_SCALE);
+            poseStack.scale(scale, scale, scale);
             mc.getItemRenderer().renderStatic(stack, ItemDisplayContext.GROUND, packedLight, OverlayTexture.NO_OVERLAY,
                     poseStack, bufferSource, mc.level, mound.getId() + i);
             poseStack.popPose();

@@ -304,6 +304,11 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
         if (seeds > 0 && this.tickCount % 20 == 0) {
             Fx.sparkle(server, x, y + 0.5D, z, 1 + seeds, 0.8D);
         }
+        // seeds turn into the real crops at the 1 minute mark (the renderer swaps the items, see SoilMoundRenderer)
+        if (seeds > 0 && remaining == 1200L) {
+            Fx.sparkle(server, x, y + 0.6D, z, 12 + seeds * 3, 0.9D);
+            Fx.sound(server, x, y, z, SoundEvents.AMETHYST_BLOCK_CHIME, 1.0F, 1.3F);
+        }
 
         if (remaining <= 40L) {
             if (this.tickCount % 2 == 0) {

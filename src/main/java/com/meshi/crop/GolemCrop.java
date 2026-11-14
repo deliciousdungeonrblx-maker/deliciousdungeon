@@ -52,6 +52,12 @@ public enum GolemCrop {
         return item == null ? ItemStack.EMPTY : new ItemStack(item);
     }
 
+    // the grown crop (cabbage etc), falls back to the planted item if the crop item isnt there
+    public ItemStack finalStack() {
+        Item item = dropItem();
+        return item == null ? plantStack() : new ItemStack(item);
+    }
+
     public static GolemCrop fromItem(ItemStack stack) {
         if (stack.isEmpty()) {
             return null;

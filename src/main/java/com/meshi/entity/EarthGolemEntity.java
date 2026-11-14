@@ -58,6 +58,9 @@ public class EarthGolemEntity extends Monster implements GeoEntity {
             SynchedEntityData.defineId(EarthGolemEntity.class, EntityDataSerializers.BOOLEAN);
     private static final EntityDataAccessor<Integer> RISE_TICKS =
             SynchedEntityData.defineId(EarthGolemEntity.class, EntityDataSerializers.INT);
+    // crop ids carried on its back, comma separated (the renderer draws the grown crops from this)
+    private static final EntityDataAccessor<String> CROP_IDS =
+            SynchedEntityData.defineId(EarthGolemEntity.class, EntityDataSerializers.STRING);
 
     public static final int RISE_DURATION = 40;
 
@@ -110,6 +113,33 @@ public class EarthGolemEntity extends Monster implements GeoEntity {
         super.defineSynchedData(builder);
         builder.define(HAS_CROPS, false);
         builder.define(RISE_TICKS, 0);
+        builder.define(CROP_IDS, "");
+    }
+
+    // client side list of the crops on its back
+    public List<GolemCrop> getCropsClient() {
+        List<GolemCrop> list = new ArrayList<>();
+        String ids = this.entityData.get(CROP_IDS);
+        if (!ids.isEmpty()) {
+            for (String id : ids.split(",")) {
+                GolemCrop crop = GolemCrop.byId(id);
+                if (crop != null) {
+                    list.add(crop);
+                }
+            }
+        }
+        return list;
+    }
+
+    private void syncCropIds() {
+        StringBuilder sb = new StringBuilder();
+        for (GolemCrop crop : this.crops) {
+            if (sb.length() > 0) {
+                sb.append(',');
+            }
+            sb.append(crop.id());
+        }
+        this.entityData.set(CROP_IDS, sb.toString());
     }
 
     public boolean hasCrops() {
@@ -140,6 +170,7 @@ public class EarthGolemEntity extends Monster implements GeoEntity {
         this.crops.clear();
         this.crops.addAll(planted);
         setHasCrops(!this.crops.isEmpty());
+        syncCropIds();
     }
 
     public void setRoom(double x0, double y0, double z0, double x1, double y1, double z1) {
@@ -196,6 +227,7 @@ public class EarthGolemEntity extends Monster implements GeoEntity {
         }
         this.crops.clear();
         this.crops.addAll(GolemCrop.readList(tag, SoilMoundEntity.MAX_SEEDS));
+        syncCropIds();
     }
 
     @Override

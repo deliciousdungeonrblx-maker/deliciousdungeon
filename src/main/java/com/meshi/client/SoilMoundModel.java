@@ -26,8 +26,8 @@ public class SoilMoundModel extends GeoModel<SoilMoundEntity> {
 
     @Override
     public ResourceLocation getTextureResource(SoilMoundEntity mound) {
-        int seeds = Math.max(0, Math.min(SoilMoundEntity.MAX_SEEDS, mound.getSeeds()));
-        return TEXTURES[seeds];
+        // always the plain mossy one, planted crops are drawn as items on top instead
+        return TEXTURES[0];
     }
 
     @Override

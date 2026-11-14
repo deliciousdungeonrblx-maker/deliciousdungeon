@@ -16,8 +16,6 @@ public class EarthGolemModel extends GeoModel<EarthGolemEntity> {
             ResourceLocation.fromNamespaceAndPath(Meshi.MODID, "animations/entity/earth_golem.animation.json");
     private static final ResourceLocation TEXTURE_NORMAL =
             ResourceLocation.fromNamespaceAndPath(Meshi.MODID, "textures/entity/earth_golem_normal.png");
-    private static final ResourceLocation TEXTURE_CROPS =
-            ResourceLocation.fromNamespaceAndPath(Meshi.MODID, "textures/entity/earth_golem_crops.png");
 
     private static final float MAX_HEAD_YAW = 45.0F;
     private static final float MAX_HEAD_PITCH = 30.0F;
@@ -29,7 +27,8 @@ public class EarthGolemModel extends GeoModel<EarthGolemEntity> {
 
     @Override
     public ResourceLocation getTextureResource(EarthGolemEntity golem) {
-        return golem.hasCrops() ? TEXTURE_CROPS : TEXTURE_NORMAL;
+        // always the normal texture, the crops are drawn as items on its back (GolemCropsLayer)
+        return TEXTURE_NORMAL;
     }
 
     @Override

@@ -11,5 +11,7 @@ public class EarthGolemRenderer extends GeoEntityRenderer<EarthGolemEntity> {
         this.shadowRadius = 0.9F;
         // glowing eyes, uses <texture>_glowmask.png
         addRenderLayer(new AutoGlowingGeoLayer<>(this));
+        // the grown crops it carries on its back
+        addRenderLayer(new GolemCropsLayer(this));
     }
 }
