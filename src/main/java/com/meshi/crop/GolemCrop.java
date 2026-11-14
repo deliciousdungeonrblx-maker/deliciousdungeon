@@ -46,6 +46,12 @@ public enum GolemCrop {
         return BuiltInRegistries.ITEM.getOptional(dropItem).orElse(null);
     }
 
+    // the item the player planted, shown on the mound
+    public ItemStack plantStack() {
+        Item item = BuiltInRegistries.ITEM.getOptional(plantItem).orElse(null);
+        return item == null ? ItemStack.EMPTY : new ItemStack(item);
+    }
+
     public static GolemCrop fromItem(ItemStack stack) {
         if (stack.isEmpty()) {
             return null;

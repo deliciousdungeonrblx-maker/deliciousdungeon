@@ -43,6 +43,9 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
             SynchedEntityData.defineId(SoilMoundEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Integer> TIMER_SECONDS =
             SynchedEntityData.defineId(SoilMoundEntity.class, EntityDataSerializers.INT);
+    // planted crop ids in order, comma separated (the renderer draws the planted items from this)
+    private static final EntityDataAccessor<String> CROP_IDS =
+            SynchedEntityData.defineId(SoilMoundEntity.class, EntityDataSerializers.STRING);
 
     private final AnimatableInstanceCache cache = GeckoLibUtil.createInstanceCache(this);
 
@@ -76,6 +79,33 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
             }
         }
         this.entityData.set(SEEDS, this.planted.size());
+        syncCropIds();
+    }
+
+    // client side list of what is planted, same order as planted
+    public List<GolemCrop> getPlantedClient() {
+        List<GolemCrop> list = new ArrayList<>();
+        String ids = this.entityData.get(CROP_IDS);
+        if (!ids.isEmpty()) {
+            for (String id : ids.split(",")) {
+                GolemCrop crop = GolemCrop.byId(id);
+                if (crop != null) {
+                    list.add(crop);
+                }
+            }
+        }
+        return list;
+    }
+
+    private void syncCropIds() {
+        StringBuilder sb = new StringBuilder();
+        for (GolemCrop crop : this.planted) {
+            if (sb.length() > 0) {
+                sb.append(',');
+            }
+            sb.append(crop.id());
+        }
+        this.entityData.set(CROP_IDS, sb.toString());
     }
 
     public long getGrowTicks() {
@@ -120,6 +150,7 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(SEEDS, 0);
         builder.define(TIMER_SECONDS, -1);
+        builder.define(CROP_IDS, "");
     }
 
     @Override
@@ -190,6 +221,7 @@ public class SoilMoundEntity extends Entity implements GeoEntity {
         if (this.level() instanceof ServerLevel server) {
             this.planted.add(crop);
             this.entityData.set(SEEDS, this.planted.size());
+            syncCropIds();
             if (!player.getAbilities().instabuild) {
                 held.shrink(1);
             }

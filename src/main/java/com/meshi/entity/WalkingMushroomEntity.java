@@ -348,6 +348,9 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
         }
         if (this.tickCount % 25 == 0) {
             server.sendParticles(ModParticles.ZZZ.get(), getX(), getY() + 0.9D, getZ(), 1, 0.12D, 0.05D, 0.12D, 0.0D);
+        }
+        // snore clip is ~5.7s long, so only start a new one once the last has finished (every 115 ticks, first one right at knockout)
+        if ((KNOCKOUT_TICKS - this.knockoutTicks) % 115 == 1) {
             sfx(server, ModSounds.MUSHROOM_SNORE, 0.5F, 1.0F);
         }
     }
@@ -514,7 +517,7 @@ public class WalkingMushroomEntity extends Monster implements GeoEntity {
             Vec3 forward = Vec3.directionFromRotation(0.0F, this.getYRot()).scale(0.2D);
             server.sendParticles(new ItemParticleOption(ParticleTypes.ITEM, stack),
                     getX() + forward.x, getY() + 0.6D, getZ() + forward.z, 4, 0.08D, 0.08D, 0.08D, 0.03D);
-            Fx.soundVaried(server, getX(), getY() + 0.5D, getZ(), SoundEvents.GENERIC_EAT, 0.6F, 1.6F);
+            sfx(server, ModSounds.MUSHROOM_EAT, 0.8F, 1.0F);
         }
     }
 

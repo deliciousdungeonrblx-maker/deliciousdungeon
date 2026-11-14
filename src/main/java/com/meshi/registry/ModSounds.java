@@ -24,6 +24,7 @@ public class ModSounds {
     public static final DeferredHolder<SoundEvent, SoundEvent> MUSHROOM_TRIP = register("mushroom_trip");
     public static final DeferredHolder<SoundEvent, SoundEvent> MUSHROOM_BONK = register("mushroom_bonk");
     public static final DeferredHolder<SoundEvent, SoundEvent> MUSHROOM_ATTACK = register("mushroom_attack");
+    public static final DeferredHolder<SoundEvent, SoundEvent> MUSHROOM_EAT = register("mushroom_eat");
 
     private static DeferredHolder<SoundEvent, SoundEvent> register(String name) {
         return SOUND_EVENTS.register(name, () ->

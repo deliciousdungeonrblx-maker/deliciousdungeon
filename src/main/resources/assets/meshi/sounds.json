@@ -2,15 +2,13 @@
   "mushroom_squeak": {
     "sounds": [
       "meshi:mushroom/squeak1",
-      "meshi:mushroom/squeak2",
-      "meshi:mushroom/squeak3"
+      "meshi:mushroom/squeak2"
     ],
     "subtitle": "subtitles.meshi.mushroom_squeak"
   },
   "mushroom_hurt": {
     "sounds": [
-      "meshi:mushroom/hurt1",
-      "meshi:mushroom/hurt2"
+      "meshi:mushroom/hurt1"
     ],
     "subtitle": "subtitles.meshi.mushroom_hurt"
   },
@@ -28,13 +26,14 @@
   },
   "mushroom_yawn": {
     "sounds": [
-      "meshi:mushroom/yawn"
+      "meshi:mushroom/squeak2"
     ],
     "subtitle": "subtitles.meshi.mushroom_yawn"
   },
   "mushroom_happy": {
     "sounds": [
-      "meshi:mushroom/happy"
+      "meshi:mushroom/happy",
+      "meshi:mushroom/happy2"
     ],
     "subtitle": "subtitles.meshi.mushroom_happy"
   },
@@ -47,7 +46,7 @@
   },
   "mushroom_slice": {
     "sounds": [
-      "meshi:mushroom/slice"
+      "meshi:mushroom/hurt1"
     ],
     "subtitle": "subtitles.meshi.mushroom_slice"
   },
@@ -74,5 +73,11 @@
       "meshi:mushroom/attack"
     ],
     "subtitle": "subtitles.meshi.mushroom_attack"
+  },
+  "mushroom_eat": {
+    "sounds": [
+      "meshi:mushroom/eat"
+    ],
+    "subtitle": "subtitles.meshi.mushroom_eat"
   }
 }
