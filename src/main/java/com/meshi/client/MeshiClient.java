@@ -17,6 +17,7 @@ public class MeshiClient {
         event.registerEntityRenderer(ModEntities.EARTH_GOLEM.get(), EarthGolemRenderer::new);
         event.registerEntityRenderer(ModEntities.SOIL_MOUND.get(), SoilMoundRenderer::new);
         event.registerEntityRenderer(ModEntities.HUGE_SCORPION.get(), HugeScorpionRenderer::new);
+        event.registerEntityRenderer(ModEntities.MIMIC.get(), MimicRenderer::new);
         event.registerEntityRenderer(ModEntities.WALKING_MUSHROOM.get(), WalkingMushroomRenderer::new);
         event.registerEntityRenderer(ModEntities.MUSHROOM_POTION.get(), ThrownItemRenderer::new);
     }

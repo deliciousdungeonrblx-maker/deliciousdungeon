@@ -4,6 +4,8 @@ import com.meshi.dungeon.DungeonEvents;
 import net.neoforged.neoforge.common.NeoForge;
 import com.meshi.entity.EarthGolemEntity;
 import com.meshi.entity.HugeScorpionEntity;
+import com.meshi.entity.MimicEntity;
+import com.meshi.entity.MimicEvents;
 import com.meshi.entity.WalkingMushroomEntity;
 import com.meshi.registry.ModBlocks;
 import com.meshi.registry.ModEffects;
@@ -31,6 +33,7 @@ public class Meshi {
 
         NeoForge.EVENT_BUS.register(DungeonEvents.class);
         NeoForge.EVENT_BUS.register(com.meshi.forest.ForestEvents.class);
+        NeoForge.EVENT_BUS.register(MimicEvents.class);
 
         modEventBus.addListener(this::registerAttributes);
         modEventBus.addListener(this::addCreativeTabItems);
@@ -39,6 +42,7 @@ public class Meshi {
     private void registerAttributes(EntityAttributeCreationEvent event) {
         event.put(ModEntities.EARTH_GOLEM.get(), EarthGolemEntity.createAttributes().build());
         event.put(ModEntities.HUGE_SCORPION.get(), HugeScorpionEntity.createAttributes().build());
+        event.put(ModEntities.MIMIC.get(), MimicEntity.createAttributes().build());
         event.put(ModEntities.WALKING_MUSHROOM.get(), WalkingMushroomEntity.createAttributes().build());
     }
 
@@ -46,6 +50,7 @@ public class Meshi {
         if (event.getTabKey() == CreativeModeTabs.SPAWN_EGGS) {
             event.accept(ModItems.EARTH_GOLEM_SPAWN_EGG);
             event.accept(ModItems.HUGE_SCORPION_SPAWN_EGG);
+            event.accept(ModItems.MIMIC_SPAWN_EGG);
             event.accept(ModItems.WALKING_MUSHROOM_SPAWN_EGG);
         }
         if (event.getTabKey() == CreativeModeTabs.FUNCTIONAL_BLOCKS) {

@@ -3,6 +3,7 @@ package com.meshi.registry;
 import com.meshi.Meshi;
 import com.meshi.entity.EarthGolemEntity;
 import com.meshi.entity.HugeScorpionEntity;
+import com.meshi.entity.MimicEntity;
 import com.meshi.entity.MushroomPotionEntity;
 import com.meshi.entity.SoilMoundEntity;
 import com.meshi.entity.WalkingMushroomEntity;
@@ -39,6 +40,14 @@ public class ModEntities {
                             .sized(0.5F, 1.1F)
                             .clientTrackingRange(8)
                             .build("walking_mushroom"));
+
+    // hitbox 0.9 x 1.0, chest sized while hidden, a bit shorter than the popped up model
+    public static final DeferredHolder<EntityType<?>, EntityType<MimicEntity>> MIMIC =
+            ENTITY_TYPES.register("mimic", () ->
+                    EntityType.Builder.<MimicEntity>of(MimicEntity::new, MobCategory.MONSTER)
+                            .sized(0.9F, 1.0F)
+                            .clientTrackingRange(10)
+                            .build("mimic"));
 
     // mound is flat, this is just the clickable area in the middle, 2.0 x 0.6
     public static final DeferredHolder<EntityType<?>, EntityType<SoilMoundEntity>> SOIL_MOUND =

@@ -25,6 +25,10 @@ public class ModItems {
             ITEMS.register("huge_scorpion_spawn_egg", () ->
                     new DeferredSpawnEggItem(ModEntities.HUGE_SCORPION, 0x8E2F5A, 0x7DC43A, new Item.Properties()));
 
+    public static final DeferredItem<DeferredSpawnEggItem> MIMIC_SPAWN_EGG =
+            ITEMS.register("mimic_spawn_egg", () ->
+                    new DeferredSpawnEggItem(ModEntities.MIMIC, 0x7A4A21, 0xD9A93A, new Item.Properties()));
+
     public static final DeferredItem<DeferredSpawnEggItem> WALKING_MUSHROOM_SPAWN_EGG =
             ITEMS.register("walking_mushroom_spawn_egg", () ->
                     new DeferredSpawnEggItem(ModEntities.WALKING_MUSHROOM, 0xC8302F, 0xEBDDB8, new Item.Properties()));
