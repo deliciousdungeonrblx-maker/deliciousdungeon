@@ -12,7 +12,8 @@ public final class DungeonLayout {
     public static final int FLOORS = 3;
     public static final int DEFAULT_GRID = 10;
     public static final int MIN_GRID = 6;
-    public static final int MAX_GRID = 16;
+    // was 16. the build is just tiles in a queue so bigger is only slower to generate (40 = 440 x 440 blocks per floor)
+    public static final int MAX_GRID = 40;
 
     // bit per side
     public static final int N = 1, E = 2, S = 4, W = 8;
@@ -227,7 +228,8 @@ public final class DungeonLayout {
         int[] sides = {N, E, S, W};
 
         // trap rooms, 13 cells each (3x3 room + 3 side rooms + entrance). dont let them eat more than 2/5 of the floor
-        int count = this.grid >= 14 ? 3 : 2;
+        // 2 below 14 wide, 3 at 14+, then one more every 14
+        int count = 2 + this.grid / 14;
         while (count > 0 && count * 13 > this.grid * this.grid * 2 / 5) {
             count--;
         }
@@ -354,7 +356,8 @@ public final class DungeonLayout {
         }
 
         // safezones (editable rest rooms) go on tiles with 2+ exits
-        int safe = this.grid >= 12 ? 2 : 1;
+        // 1 below 12 wide, 2 at 12+, then one more every 12
+        int safe = 1 + this.grid / 12;
         for (Tile t : middles) {
             if (safe > 0 && t.degree() >= 2) {
                 t.type = Type.SAFEZONE;

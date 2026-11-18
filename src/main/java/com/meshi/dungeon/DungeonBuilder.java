@@ -25,6 +25,8 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.ChestBlock;
+import net.minecraft.world.level.block.state.properties.ChestType;
+import com.meshi.entity.MimicEntity;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.WallTorchBlock;
@@ -45,6 +47,9 @@ public class DungeonBuilder {
 
     private static final BlockState AIR = Blocks.AIR.defaultBlockState();
 
+    // chance that a chest in a dead end is a mimic instead (0.2 = 1 in 5)
+    public static final double MIMIC_CHANCE = 0.2D;
+
     final ServerLevel level;
     final DungeonData data;
     public final DungeonLayout layout;
@@ -62,6 +67,8 @@ public class DungeonBuilder {
     Random rng;
     int bx, bz, yb;
     boolean[][] open;
+    // golem room interior of the current tile (local cells, inclusive). 1..9 by default, grows to the tile edge where it can
+    int roomX0 = 1, roomX1 = 9, roomZ0 = 1, roomZ1 = 9;
 
     // edit plots live far away from the dungeon (x = 3300+, z = 3300)
     public static final int PLOT_TILE_X = 300;
@@ -324,8 +331,14 @@ public class DungeonBuilder {
             stamp(this.store.get(key), key, t);
         }
         if (!this.plotMode) {
+            if (t.type == Type.GOLEM) {
+                sealGridEdges(t);
+            }
             for (int[] g : this.golemSpots) {
                 spawnGolem(g[0], g[1]);
+            }
+            if (t.type == Type.DEAD_END) {
+                mimicChests();
             }
         }
     }
@@ -649,9 +662,31 @@ public class DungeonBuilder {
         if (t.has(DungeonLayout.W)) box(0, 0, 4, 6);
     }
 
-    // golem room: the one entrance is a single wide door
+    // is there another tile on that side of this one (golem rooms only grow toward real neighbours, never out of the dungeon)
+    private boolean canGrow(Tile t, int side) {
+        if (this.layout == null) {
+            return true;
+        }
+        int nx = t.x + (side == DungeonLayout.E ? 1 : side == DungeonLayout.W ? -1 : 0);
+        int nz = t.z + (side == DungeonLayout.S ? 1 : side == DungeonLayout.N ? -1 : 0);
+        return nx >= 0 && nz >= 0 && nx < this.layout.grid && nz < this.layout.grid;
+    }
+
+    // golem room: the one entrance is a single wide door. the room is 9 x 9 and grows 1 block toward every side that
+    // is not the door side (keeps a 1 block wall to the next tile). no growing at the edge of the dungeon
     private void golemMask(Tile t) {
-        box(1, 9, 1, 9);
+        int door = DungeonLayout.N;
+        for (int side : new int[]{DungeonLayout.N, DungeonLayout.E, DungeonLayout.S, DungeonLayout.W}) {
+            if (t.has(side)) {
+                door = side;
+                break;
+            }
+        }
+        this.roomX0 = door != DungeonLayout.W && canGrow(t, DungeonLayout.W) ? 0 : 1;
+        this.roomX1 = door != DungeonLayout.E && canGrow(t, DungeonLayout.E) ? TILE - 1 : 9;
+        this.roomZ0 = door != DungeonLayout.N && canGrow(t, DungeonLayout.N) ? 0 : 1;
+        this.roomZ1 = door != DungeonLayout.S && canGrow(t, DungeonLayout.S) ? TILE - 1 : 9;
+        box(this.roomX0, this.roomX1, this.roomZ0, this.roomZ1);
         if (t.has(DungeonLayout.N)) box(5, 5, 0, 0);
         if (t.has(DungeonLayout.E)) box(10, 10, 5, 5);
         if (t.has(DungeonLayout.S)) box(5, 5, 10, 10);
@@ -735,9 +770,80 @@ public class DungeonBuilder {
         golem.moveTo(p.getX() + 0.5D, p.getY(), p.getZ() + 0.5D, this.rng.nextFloat() * 360.0F, 0.0F);
         golem.setPersistenceRequired();
         // the golem only fights players that are inside its room (interior cells 1..9, floor to ceiling)
-        golem.setRoom(this.bx + 1, this.yb, this.bz + 1, this.bx + TILE - 1, this.yb + 6, this.bz + TILE - 1);
+        golem.setRoom(this.bx + this.roomX0, this.yb, this.bz + this.roomZ0,
+                this.bx + this.roomX1 + 1, this.yb + 6, this.bz + this.roomZ1 + 1);
         golem.finalizeSpawn(this.level, this.level.getCurrentDifficultyAt(p), MobSpawnType.STRUCTURE, null);
         this.level.addFreshEntity(golem);
+    }
+
+    // golem room torch. when the room reaches the tile edge the wall behind it is in the next tile (maybe not built yet), so no support check
+    boolean wallTorch(int lx, int rel, int lz, Direction facing) {
+        int sx = lx - facing.getStepX();
+        int sz = lz - facing.getStepZ();
+        if (sx >= 0 && sx < TILE && sz >= 0 && sz < TILE) {
+            return torch(lx, rel, lz, facing);
+        }
+        BlockPos pos = world(lx, rel, lz);
+        if (!this.level.getBlockState(pos).isAir()) {
+            return false;
+        }
+        this.level.setBlock(pos, Blocks.WALL_TORCH.defaultBlockState().setValue(WallTorchBlock.FACING, facing), 18);
+        return true;
+    }
+
+    // a saved golem room can reach the tile edge, wall those sides back up where the dungeon ends
+    private void sealGridEdges(Tile t) {
+        for (int side : new int[]{DungeonLayout.N, DungeonLayout.E, DungeonLayout.S, DungeonLayout.W}) {
+            if (canGrow(t, side)) {
+                continue;
+            }
+            for (int i = 0; i < TILE; i++) {
+                for (int rel = 1; rel <= 5; rel++) {
+                    switch (side) {
+                        case DungeonLayout.N -> setL(i, rel, 0, wallBlock(rel));
+                        case DungeonLayout.S -> setL(i, rel, TILE - 1, wallBlock(rel));
+                        case DungeonLayout.W -> setL(0, rel, i, wallBlock(rel));
+                        default -> setL(TILE - 1, rel, i, wallBlock(rel));
+                    }
+                }
+            }
+        }
+    }
+
+    // dead end chests have a chance to be a mimic. same spot, same facing as the chest, loot of that chest is gone
+    private void mimicChests() {
+        for (int lx = 0; lx < TILE; lx++) {
+            for (int lz = 0; lz < TILE; lz++) {
+                BlockPos pos = world(lx, 1, lz);
+                BlockState s = this.level.getBlockState(pos);
+                if (!s.is(Blocks.CHEST) || s.getValue(ChestBlock.TYPE) != ChestType.SINGLE) {
+                    continue;
+                }
+                if (this.rng.nextDouble() >= MIMIC_CHANCE) {
+                    continue;
+                }
+                Direction facing = s.getValue(ChestBlock.FACING);
+                this.level.setBlock(pos, AIR, 18);
+                this.data.lootSpots.remove(pos.asLong());
+                this.data.setDirty();
+                spawnMimic(pos, facing);
+            }
+        }
+    }
+
+    private void spawnMimic(BlockPos pos, Direction facing) {
+        MimicEntity mimic = ModEntities.MIMIC.get().create(this.level);
+        if (mimic == null) {
+            return;
+        }
+        // chest front faces the same way the mimic does (toYRot: south 0, west 90, north 180, east 270)
+        float yaw = facing.toYRot();
+        mimic.moveTo(pos.getX() + 0.5D, pos.getY(), pos.getZ() + 0.5D, yaw, 0.0F);
+        mimic.setYBodyRot(yaw);
+        mimic.setYHeadRot(yaw);
+        mimic.setPersistenceRequired();
+        mimic.finalizeSpawn(this.level, this.level.getCurrentDifficultyAt(pos), MobSpawnType.STRUCTURE, null);
+        this.level.addFreshEntity(mimic);
     }
 
     BlockState stairs(Direction facing, Half half) {

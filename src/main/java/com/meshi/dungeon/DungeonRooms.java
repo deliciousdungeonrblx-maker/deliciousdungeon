@@ -190,7 +190,11 @@ final class DungeonRooms {
         pillar(b, 9, 1);
         pillar(b, 1, 9);
         pillar(b, 9, 9);
-        cornerTorches(b);
+        // same 4 torches as the other rooms but on the real walls (the room can be bigger than 9 x 9)
+        b.wallTorch(b.roomX0, 3, 3, Direction.EAST);
+        b.wallTorch(b.roomX1, 3, 7, Direction.WEST);
+        b.wallTorch(7, 3, b.roomZ0, Direction.SOUTH);
+        b.wallTorch(3, 3, b.roomZ1, Direction.NORTH);
         int side = connectedSide(b.tile);
         int lx = side == DungeonLayout.E ? 10 : side == DungeonLayout.W ? 0 : 5;
         int lz = side == DungeonLayout.S ? 10 : side == DungeonLayout.N ? 0 : 5;

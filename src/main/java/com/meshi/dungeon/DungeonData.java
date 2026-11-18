@@ -21,7 +21,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 public class DungeonData extends SavedData {
     public static final String NAME = "meshi_dungeon";
     public static final int MUSHROOM_CAP = 20;
-    public static final int MAX_SPOTS = 3000;
+    public static final int MAX_SPOTS = 12000;
 
     public boolean generated = false;
     public BlockPos spawn = BlockPos.ZERO;
