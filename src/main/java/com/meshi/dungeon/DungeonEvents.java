@@ -105,6 +105,8 @@ public class DungeonEvents {
                                 .then(Commands.literal("unbind").executes(DungeonEvents::lootUnbind))
                                 .then(Commands.literal("refill").executes(DungeonEvents::lootRefill)))
                         .then(Commands.literal("tp").executes(DungeonEvents::teleport))
+                        .then(Commands.literal("lock").executes(ctx -> lockChest(ctx, true)))
+                        .then(Commands.literal("unlock").executes(ctx -> lockChest(ctx, false)))
                         .then(Commands.literal("trapsense")
                                 .executes(ctx -> trapSense(ctx, 10))
                                 .then(Commands.argument("radius", IntegerArgumentType.integer(1, 16))
@@ -440,6 +442,44 @@ public class DungeonEvents {
         }
         var state = level.getBlockState(bhr.getBlockPos());
         return state.is(Blocks.CHEST) || state.is(Blocks.BARREL) || state.is(Blocks.TRAPPED_CHEST) ? bhr.getBlockPos() : null;
+    }
+
+    // look at a chest in the dungeon: /meshi dungeon lock makes it a locked chest (locked loot of its floor), unlock frees it
+    private static int lockChest(CommandContext<CommandSourceStack> ctx, boolean lock) {
+        CommandSourceStack src = ctx.getSource();
+        ServerLevel level = src.getServer().getLevel(DIMENSION);
+        ServerPlayer player = src.getPlayer();
+        if (level == null || player == null || player.level() != level) {
+            src.sendFailure(Component.literal("stand in the dungeon and look at a chest"));
+            return 0;
+        }
+        BlockPos pos = lookedAtContainer(player, level);
+        var state = pos == null ? null : level.getBlockState(pos);
+        if (state == null || !state.is(Blocks.CHEST)
+                || state.getValue(net.minecraft.world.level.block.ChestBlock.TYPE) != net.minecraft.world.level.block.state.properties.ChestType.SINGLE) {
+            src.sendFailure(Component.literal("look at a single chest (within 6 blocks)"));
+            return 0;
+        }
+        if (pos.getX() >= DungeonBuilder.EDIT_MIN_X) {
+            src.sendFailure(Component.literal("not in edit plots, locks are only for the real dungeon"));
+            return 0;
+        }
+        DungeonData data = DungeonData.get(level);
+        if (!lock) {
+            boolean was = data.lockedChests.remove(pos.asLong());
+            data.lockAttempts.remove(pos.asLong());
+            data.setDirty();
+            src.sendSuccess(() -> Component.literal(was ? "chest unlocked" : "that chest wasnt locked"), true);
+            return 1;
+        }
+        String pool = "locked_" + (DungeonBuilder.floorOfY(pos.getY()) + 1);
+        LootStore.get(level).fill(level, pos, pool, new java.util.Random());
+        data.lockedChests.add(pos.asLong());
+        data.lockAttempts.remove(pos.asLong());
+        data.lootSpots.put(pos.asLong(), pool);
+        data.setDirty();
+        src.sendSuccess(() -> Component.literal("chest locked, it got the " + pool + " loot"), true);
+        return 1;
     }
 
     // rolls the loot of every container the generator placed again (after you edited a pool)

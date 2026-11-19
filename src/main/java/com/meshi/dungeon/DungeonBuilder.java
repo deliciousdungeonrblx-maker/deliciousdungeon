@@ -49,6 +49,8 @@ public class DungeonBuilder {
 
     // chance that a chest in a dead end is a mimic instead (0.2 = 1 in 5)
     public static final double MIMIC_CHANCE = 0.2D;
+    // chance that a normal single chest is locked (needs a lockpick), 0.12 = about 1 in 8
+    public static final double LOCK_CHANCE = 0.12D;
 
     final ServerLevel level;
     final DungeonData data;
@@ -212,6 +214,15 @@ public class DungeonBuilder {
             return;
         }
         String pool = bound != null && this.loot.has(bound) ? bound : defaultPool();
+        // locked chests: only plain single chests with no pool you picked, better loot
+        String lockedPool = "locked_" + (this.tile.floor + 1);
+        BlockState here = this.level.getBlockState(pos);
+        if (bound == null && here.is(Blocks.CHEST) && here.getValue(ChestBlock.TYPE) == ChestType.SINGLE
+                && this.loot.has(lockedPool) && this.rng.nextDouble() < LOCK_CHANCE) {
+            pool = lockedPool;
+            this.data.lockedChests.add(pos.asLong());
+            this.data.setDirty();
+        }
         this.loot.fill(this.level, pos, pool, this.rng);
         this.data.lootSpots.put(pos.asLong(), pool);
     }
@@ -819,7 +830,7 @@ public class DungeonBuilder {
                 if (!s.is(Blocks.CHEST) || s.getValue(ChestBlock.TYPE) != ChestType.SINGLE) {
                     continue;
                 }
-                if (this.rng.nextDouble() >= MIMIC_CHANCE) {
+                if (this.data.lockedChests.contains(pos.asLong()) || this.rng.nextDouble() >= MIMIC_CHANCE) {
                     continue;
                 }
                 Direction facing = s.getValue(ChestBlock.FACING);

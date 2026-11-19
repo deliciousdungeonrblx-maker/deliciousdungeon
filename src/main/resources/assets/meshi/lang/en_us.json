@@ -42,5 +42,14 @@
   "block.meshi.arrow_trap_plate": "Arrow Trap Floor",
   "block.meshi.fire_trap_plate": "Fire Trap Floor",
   "item.meshi.mushroom_potion": "Splash Potion of Mushrooms",
-  "entity.meshi.mushroom_potion": "Splash Potion of Mushrooms"
+  "entity.meshi.mushroom_potion": "Splash Potion of Mushrooms",
+  "item.meshi.lockpick": "Lockpick",
+  "message.meshi.chest.locked": "This chest is locked.. You need a lockpick to unlock it!",
+  "message.meshi.lockpick.fail1": "The pins won't budge... try again.",
+  "message.meshi.lockpick.fail2": "Almost.. the lock holds.",
+  "message.meshi.lockpick.fail3": "Slipped! Keep trying.",
+  "message.meshi.lockpick.success": "Click! The chest is unlocked.",
+  "message.meshi.lockpick.levelup": "Your lockpicking improved! (level %s)",
+  "message.meshi.lockpick.maxed": "Your lockpicking can't get any better. Master lockpicker! (level %s)",
+  "message.meshi.lockpick.skill": "Lockpicking level %s/%s - %s chests picked"
 }

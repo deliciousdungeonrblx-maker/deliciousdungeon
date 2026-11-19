@@ -20,6 +20,8 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.entity.ChestBlockEntity;
+import com.meshi.registry.ModItems;
 import net.minecraft.world.level.saveddata.SavedData;
 
 // loot pools u edit ingame. one pool = one 6 row chest, row 1 common -> row 6 rare
@@ -29,6 +31,8 @@ public class LootStore extends SavedData {
     public static final int SLOTS = 54;
     // chance weight of row 1..6
     private static final int[] ROW_WEIGHTS = {40, 28, 18, 9, 4, 1};
+    // 1 in this many (unlocked) chests also has a lockpick in it
+    public static final int LOCKPICK_ODDS = 50;
 
     public static final class Pool {
         public final ItemStack[] slots = new ItemStack[SLOTS];
@@ -156,6 +160,17 @@ public class LootStore extends SavedData {
                 c.setItem(slot, give);
             }
         }
+        // rare lockpick, only in normal chests (not barrels, not the locked ones)
+        if (c instanceof ChestBlockEntity && !poolName.startsWith("locked_") && rng.nextInt(LOCKPICK_ODDS) == 0) {
+            int size = c.getContainerSize();
+            int slot = rng.nextInt(size);
+            for (int tries = 0; tries < size && !c.getItem(slot).isEmpty(); tries++) {
+                slot = (slot + 1) % size;
+            }
+            if (c.getItem(slot).isEmpty()) {
+                c.setItem(slot, new ItemStack(ModItems.LOCKPICK.get()));
+            }
+        }
         c.setChanged();
         return true;
     }
@@ -241,6 +256,16 @@ public class LootStore extends SavedData {
         return new ItemStack(item, max);
     }
 
+    private static Pool locked(Pool src, int min, int max) {
+        Pool p = new Pool();
+        for (int i = 0; i < SLOTS; i++) {
+            p.slots[i] = src.slots[i].copy();
+        }
+        p.minRolls = min;
+        p.maxRolls = max;
+        return p;
+    }
+
     private static Map<String, Pool> defaultPools() {
         Map<String, Pool> m = new LinkedHashMap<>();
 
@@ -291,6 +316,13 @@ public class LootStore extends SavedData {
         row(sz, 1, s(Items.COOKED_CHICKEN, 3), s(Items.GOLDEN_CARROT, 2), s(Items.EXPERIENCE_BOTTLE, 2));
         row(sz, 2, s(Items.GOLDEN_APPLE, 1));
         m.put("safezone", sz);
+
+        // locked chests: floor n gets the loot of the floor below + more rolls (edit them like any pool)
+        m.put("locked_1", locked(f2, 4, 6));
+        m.put("locked_2", locked(f3, 5, 8));
+        Pool l3 = locked(f3, 8, 11);
+        row(l3, 5, s(Items.NETHERITE_INGOT, 1), s(Items.ELYTRA, 1), s(Items.TOTEM_OF_UNDYING, 1), s(Items.NETHERITE_SCRAP, 3));
+        m.put("locked_3", l3);
         return m;
     }
 }

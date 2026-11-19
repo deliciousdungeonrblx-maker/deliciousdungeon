@@ -3,6 +3,7 @@ package com.meshi.registry;
 import com.meshi.Meshi;
 import com.meshi.item.GolemSoilItem;
 import com.meshi.item.HotpotServingItem;
+import com.meshi.item.LockpickItem;
 import com.meshi.item.MushroomPotionItem;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
@@ -93,4 +94,8 @@ public class ModItems {
 
     public static final DeferredItem<MushroomPotionItem> MUSHROOM_POTION =
             ITEMS.register("mushroom_potion", () -> new MushroomPotionItem(new Item.Properties().stacksTo(16)));
+
+    // rare drop from dungeon chests (see LootStore), opens locked chests (LockedChests)
+    public static final DeferredItem<LockpickItem> LOCKPICK =
+            ITEMS.register("lockpick", () -> new LockpickItem(new Item.Properties().stacksTo(16)));
 }

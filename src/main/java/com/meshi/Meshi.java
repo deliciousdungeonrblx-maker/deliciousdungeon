@@ -35,6 +35,7 @@ public class Meshi {
         NeoForge.EVENT_BUS.register(com.meshi.forest.ForestEvents.class);
         NeoForge.EVENT_BUS.register(com.meshi.dungeon.DungeonCleaner.class);
         NeoForge.EVENT_BUS.register(MimicEvents.class);
+        NeoForge.EVENT_BUS.register(com.meshi.dungeon.LockedChests.class);
 
         modEventBus.addListener(this::registerAttributes);
         modEventBus.addListener(this::addCreativeTabItems);
@@ -68,6 +69,9 @@ public class Meshi {
             event.accept(ModItems.MUSHCORPSE);
             event.accept(ModItems.MUSHBODY);
             event.accept(ModItems.MUSHFEET);
+        }
+        if (event.getTabKey() == CreativeModeTabs.TOOLS_AND_UTILITIES) {
+            event.accept(ModItems.LOCKPICK);
         }
         if (event.getTabKey() == CreativeModeTabs.FOOD_AND_DRINKS) {
             event.accept(ModItems.HOTPOT);

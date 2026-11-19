@@ -1,6 +1,7 @@
 package com.meshi.dungeon;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -31,6 +32,11 @@ public class DungeonData extends SavedData {
     public final Map<Long, String> lootSpots = new LinkedHashMap<>();
     // min corner (as long) of every safezone tile
     public final List<Long> safezones = new ArrayList<>();
+    // locked chests (block pos as long) + how many pick attempts each one had
+    public final Set<Long> lockedChests = new HashSet<>();
+    public final Map<Long, Integer> lockAttempts = new HashMap<>();
+    // player -> locked chests they picked. regenerate does NOT reset this
+    public final Map<UUID, Integer> picked = new HashMap<>();
     // zombie + skeleton cap per floor, deeper = more. only counts loaded ones
     public int[] mobCaps = {6, 10, 14};
 
@@ -55,6 +61,17 @@ public class DungeonData extends SavedData {
         }
         for (Tag t : tag.getList("Safezones", Tag.TAG_LONG)) {
             data.safezones.add(((LongTag) t).getAsLong());
+        }
+        for (Tag t : tag.getList("Locked", Tag.TAG_LONG)) {
+            data.lockedChests.add(((LongTag) t).getAsLong());
+        }
+        for (Tag t : tag.getList("LockTries", Tag.TAG_COMPOUND)) {
+            CompoundTag c = (CompoundTag) t;
+            data.lockAttempts.put(c.getLong("Pos"), c.getInt("N"));
+        }
+        for (Tag t : tag.getList("Picked", Tag.TAG_COMPOUND)) {
+            CompoundTag c = (CompoundTag) t;
+            data.picked.put(c.getUUID("Id"), c.getInt("N"));
         }
         int[] caps = tag.getIntArray("MobCaps");
         if (caps.length == 3) {
@@ -90,6 +107,27 @@ public class DungeonData extends SavedData {
             safe.add(LongTag.valueOf(l));
         }
         tag.put("Safezones", safe);
+        ListTag locked = new ListTag();
+        for (long l : this.lockedChests) {
+            locked.add(LongTag.valueOf(l));
+        }
+        tag.put("Locked", locked);
+        ListTag tries = new ListTag();
+        for (Map.Entry<Long, Integer> e : this.lockAttempts.entrySet()) {
+            CompoundTag c = new CompoundTag();
+            c.putLong("Pos", e.getKey());
+            c.putInt("N", e.getValue());
+            tries.add(c);
+        }
+        tag.put("LockTries", tries);
+        ListTag pk = new ListTag();
+        for (Map.Entry<UUID, Integer> e : this.picked.entrySet()) {
+            CompoundTag c = new CompoundTag();
+            c.putUUID("Id", e.getKey());
+            c.putInt("N", e.getValue());
+            pk.add(c);
+        }
+        tag.put("Picked", pk);
         tag.putIntArray("MobCaps", this.mobCaps);
         return tag;
     }
@@ -113,6 +151,8 @@ public class DungeonData extends SavedData {
         this.mushrooms.clear();
         this.lootSpots.clear();
         this.safezones.clear();
+        this.lockedChests.clear();
+        this.lockAttempts.clear();
         setDirty();
     }
 }
