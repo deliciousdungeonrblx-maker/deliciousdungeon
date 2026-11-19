@@ -166,6 +166,7 @@ public class DungeonEvents {
             old.forEach(Entity::discard);
         }
         data.reset();
+        DungeonCleaner.clear(level);
         builder = new DungeonBuilder(level, data, seed, size);
         src.sendSuccess(() -> Component.literal("building the dungeon, seed " + seed + ", " + size + "x" + size
                 + " tiles per floor. your saved rooms get used. it takes a bit"), true);
@@ -495,6 +496,7 @@ public class DungeonEvents {
             DungeonMobs.sweep(level, data);
         }
         DungeonAmbience.tick(level, data);
+        DungeonCleaner.tick(level);
         if (tick % UPKEEP_INTERVAL == 0) {
             topUpMushrooms(level);
         }

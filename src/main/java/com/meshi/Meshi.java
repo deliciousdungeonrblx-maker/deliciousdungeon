@@ -33,6 +33,7 @@ public class Meshi {
 
         NeoForge.EVENT_BUS.register(DungeonEvents.class);
         NeoForge.EVENT_BUS.register(com.meshi.forest.ForestEvents.class);
+        NeoForge.EVENT_BUS.register(com.meshi.dungeon.DungeonCleaner.class);
         NeoForge.EVENT_BUS.register(MimicEvents.class);
 
         modEventBus.addListener(this::registerAttributes);
