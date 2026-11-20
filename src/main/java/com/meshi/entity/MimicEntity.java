@@ -268,15 +268,11 @@ public class MimicEntity extends Monster implements GeoEntity {
         if (e == 1 || e == 8) {
             Fx.sound(server, x, y, z, SoundEvents.CHEST_LOCKED, 1.1F, e == 1 ? 0.7F : 0.5F);
             Fx.sound(server, x, y, z, SoundEvents.WOOD_HIT, 1.0F, 0.6F);
-            server.sendParticles(planks(), x, y + 0.8D, z, 10, 0.35D, 0.1D, 0.35D, 0.04D);
-        }
-        if (e >= 2 && e < 17 && e % 2 == 0) {
-            server.sendParticles(ParticleTypes.SMOKE, x, y + 0.85D, z, 2, 0.3D, 0.05D, 0.3D, 0.01D);
+            server.sendParticles(planks(), x, y + 0.8D, z, 4, 0.3D, 0.1D, 0.3D, 0.03D);
         }
         if (e == 12) {
             Fx.sound(server, x, y, z, SoundEvents.SPIDER_AMBIENT, 1.0F, 0.5F);
             Fx.sound(server, x, y, z, SoundEvents.CHEST_LOCKED, 1.3F, 0.4F);
-            server.sendParticles(ParticleTypes.LARGE_SMOKE, x, y + 0.9D, z, 6, 0.3D, 0.1D, 0.3D, 0.02D);
         }
         if (e == 17) {
             burstEffects(server);
@@ -295,13 +291,9 @@ public class MimicEntity extends Monster implements GeoEntity {
         double z = getZ();
         Fx.sound(server, x, y, z, SoundEvents.CHEST_OPEN, 1.5F, 0.5F);
         Fx.sound(server, x, y, z, SoundEvents.ZOMBIE_BREAK_WOODEN_DOOR, 1.3F, 0.7F);
-        Fx.sound(server, x, y, z, SoundEvents.RAVAGER_ROAR, 1.4F, 1.0F);
-        server.sendParticles(planks(), x, y + 0.9D, z, 70, 0.5D, 0.4D, 0.5D, 0.15D);
-        Fx.shockwave(server, planks(), x, y + 0.1D, z, 2.5D);
-        Fx.dust(server, x, y + 0.6D, z, 16, 0.7D);
-        server.sendParticles(ParticleTypes.LARGE_SMOKE, x, y + 1.0D, z, 14, 0.4D, 0.3D, 0.4D, 0.04D);
-        server.sendParticles(ParticleTypes.SOUL, x, y + 0.9D, z, 14, 0.4D, 0.4D, 0.4D, 0.04D);
-        server.sendParticles(ParticleTypes.ANGRY_VILLAGER, x, y + 1.2D, z, 5, 0.4D, 0.3D, 0.4D, 0.0D);
+        server.sendParticles(planks(), x, y + 0.9D, z, 28, 0.45D, 0.3D, 0.45D, 0.1D);
+        Fx.shockwave(server, planks(), x, y + 0.1D, z, 1.8D);
+        Fx.dust(server, x, y + 0.6D, z, 6, 0.6D);
     }
 
     private void finishPopup() {
@@ -384,7 +376,7 @@ public class MimicEntity extends Monster implements GeoEntity {
     // goal calls this when the bite starts (lid opens wide) and when it snaps shut
     public void biteStartEffects() {
         if (this.level() instanceof ServerLevel server) {
-            Fx.sound(server, getX(), getY() + 0.5D, getZ(), SoundEvents.RAVAGER_ATTACK, 0.9F, 1.1F);
+            Fx.sound(server, getX(), getY() + 0.5D, getZ(), SoundEvents.CHEST_OPEN, 0.8F, 0.7F);
         }
     }
 
@@ -403,8 +395,7 @@ public class MimicEntity extends Monster implements GeoEntity {
             double z = getZ();
             server.sendParticles(planks(), x, y + 0.8D, z, 90, 0.6D, 0.5D, 0.6D, 0.15D);
             Fx.dust(server, x, y + 0.6D, z, 14, 0.7D);
-            server.sendParticles(ParticleTypes.SOUL, x, y + 0.9D, z, 10, 0.4D, 0.4D, 0.4D, 0.05D);
-            Fx.sound(server, x, y, z, SoundEvents.WOOD_BREAK, 1.4F, 0.7F);
+                Fx.sound(server, x, y, z, SoundEvents.WOOD_BREAK, 1.4F, 0.7F);
             Fx.sound(server, x, y, z, SoundEvents.CHEST_CLOSE, 1.2F, 0.6F);
         }
     }
@@ -414,17 +405,17 @@ public class MimicEntity extends Monster implements GeoEntity {
     @Override
     @Nullable
     protected SoundEvent getAmbientSound() {
-        return isAwake() ? SoundEvents.RAVAGER_AMBIENT : null;
+        return isAwake() ? SoundEvents.SPIDER_AMBIENT : null;
     }
 
     @Override
     protected SoundEvent getHurtSound(DamageSource source) {
-        return SoundEvents.RAVAGER_HURT;
+        return SoundEvents.SPIDER_HURT;
     }
 
     @Override
     protected SoundEvent getDeathSound() {
-        return SoundEvents.RAVAGER_DEATH;
+        return SoundEvents.SPIDER_DEATH;
     }
 
     @Override
