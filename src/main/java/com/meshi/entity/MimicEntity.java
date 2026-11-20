@@ -13,6 +13,8 @@ import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
+import net.minecraft.util.Mth;
+import net.minecraft.world.DifficultyInstance;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.damagesource.DamageSource;
@@ -20,6 +22,8 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.SpawnGroupData;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.goal.FloatGoal;
@@ -33,6 +37,7 @@ import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.ServerLevelAccessor;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
@@ -135,6 +140,28 @@ public class MimicEntity extends Monster implements GeoEntity {
                 return MimicEntity.this.isAwake() && super.canUse();
             }
         });
+    }
+
+    // placed by egg / summon = lock side turns to face the nearest player (nearest 90 degrees, like a chest)
+    @Override
+    public SpawnGroupData finalizeSpawn(ServerLevelAccessor level, DifficultyInstance difficulty, MobSpawnType type,
+                                        @Nullable SpawnGroupData data) {
+        SpawnGroupData out = super.finalizeSpawn(level, difficulty, type, data);
+        if (type == MobSpawnType.SPAWN_EGG || type == MobSpawnType.COMMAND) {
+            Player p = level.getNearestPlayer(this, 12.0D);
+            if (p != null) {
+                double dx = p.getX() - getX();
+                double dz = p.getZ() - getZ();
+                float yaw = Math.round((float) (Mth.atan2(-dx, dz) * 57.29578D) / 90.0F) * 90.0F;
+                this.setYRot(yaw);
+                this.setYBodyRot(yaw);
+                this.setYHeadRot(yaw);
+                this.yRotO = yaw;
+                this.yBodyRotO = yaw;
+                this.yHeadRotO = yaw;
+            }
+        }
+        return out;
     }
 
     // ---- state
