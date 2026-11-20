@@ -215,7 +215,7 @@ public class DungeonEvents {
             return 0;
         }
         RoomStore store = RoomStore.get(level);
-        StringBuilder sb = new StringBuilder("rooms (* = you edited it):");
+        StringBuilder sb = new StringBuilder("rooms (* = saved version, yours or the mod preset):");
         for (String key : RoomStore.editable()) {
             sb.append("\n ").append(store.has(key) ? "* " : "  ").append(key);
         }
@@ -283,12 +283,13 @@ public class DungeonEvents {
             return 0;
         }
         RoomStore store = RoomStore.get(level);
-        if (!store.has(key)) {
+        if (!store.hasOwn(key)) {
             src.sendFailure(Component.literal(key + " has no edits"));
             return 0;
         }
         store.remove(key);
-        src.sendSuccess(() -> Component.literal(key + " is back to the generated look. /meshi dungeon room reload " + key
+        String back = store.has(key) ? "the mod preset" : "the generated look";
+        src.sendSuccess(() -> Component.literal(key + " is back to " + back + ". /meshi dungeon room reload " + key
                 + " redraws its plot"), true);
         return 1;
     }

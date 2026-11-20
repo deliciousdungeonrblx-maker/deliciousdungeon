@@ -66,6 +66,7 @@ public class RoomStore extends SavedData {
     private final Map<Long, String> plotPools = new HashMap<>();
 
     public static RoomStore get(ServerLevel level) {
+        Presets.init(level.registryAccess());
         return level.getDataStorage().computeIfAbsent(
                 new SavedData.Factory<>(RoomStore::new, RoomStore::load, null), NAME);
     }
@@ -108,12 +109,23 @@ public class RoomStore extends SavedData {
         return KEYS.stream().filter(k -> !unused(k)).toList();
     }
 
+    // saved in this world, or shipped with the mod (data/meshi/presets)
     public boolean has(String key) {
+        return this.rooms.containsKey(key) || Presets.room(key) != null;
+    }
+
+    // only what was saved in this world
+    public boolean hasOwn(String key) {
         return this.rooms.containsKey(key);
     }
 
-    public Room get(String key) {
+    Room own(String key) {
         return this.rooms.get(key);
+    }
+
+    public Room get(String key) {
+        Room r = this.rooms.get(key);
+        return r != null ? r : Presets.room(key);
     }
 
     public void remove(String key) {

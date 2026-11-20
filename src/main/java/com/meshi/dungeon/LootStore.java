@@ -51,6 +51,7 @@ public class LootStore extends SavedData {
     }
 
     public static LootStore get(ServerLevel level) {
+        Presets.init(level.registryAccess());
         return level.getDataStorage().computeIfAbsent(
                 new SavedData.Factory<>(LootStore::new, LootStore::load, null), NAME);
     }
@@ -203,20 +204,23 @@ public class LootStore extends SavedData {
         LootStore store = new LootStore();
         CompoundTag all = tag.getCompound("Pools");
         for (String key : all.getAllKeys()) {
-            CompoundTag c = all.getCompound(key);
-            Pool pool = new Pool();
-            pool.minRolls = c.getInt("Min");
-            pool.maxRolls = c.getInt("Max");
-            for (Tag t : c.getList("Slots", Tag.TAG_COMPOUND)) {
-                CompoundTag s = (CompoundTag) t;
-                int slot = s.getInt("Slot");
-                if (slot >= 0 && slot < SLOTS) {
-                    pool.slots[slot] = ItemStack.parseOptional(provider, s.getCompound("Item"));
-                }
-            }
-            store.pools.put(key, pool);
+            store.pools.put(key, readPool(all.getCompound(key), provider));
         }
         return store;
+    }
+
+    static Pool readPool(CompoundTag c, HolderLookup.Provider provider) {
+        Pool pool = new Pool();
+        pool.minRolls = c.getInt("Min");
+        pool.maxRolls = c.getInt("Max");
+        for (Tag t : c.getList("Slots", Tag.TAG_COMPOUND)) {
+            CompoundTag s = (CompoundTag) t;
+            int slot = s.getInt("Slot");
+            if (slot >= 0 && slot < SLOTS) {
+                pool.slots[slot] = ItemStack.parseOptional(provider, s.getCompound("Item"));
+            }
+        }
+        return pool;
     }
 
     @Override
@@ -323,6 +327,8 @@ public class LootStore extends SavedData {
         Pool l3 = locked(f3, 8, 11);
         row(l3, 5, s(Items.NETHERITE_INGOT, 1), s(Items.ELYTRA, 1), s(Items.TOTEM_OF_UNDYING, 1), s(Items.NETHERITE_SCRAP, 3));
         m.put("locked_3", l3);
+        // pools shipped in data/meshi/presets win over the ones above
+        m.putAll(Presets.lootPools());
         return m;
     }
 }
